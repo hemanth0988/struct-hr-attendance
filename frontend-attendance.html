@@ -201,7 +201,10 @@
           throw new Error(err.detail || "Failed to save attendance");
         }
         const result = await res.json();
-        setStatus(`Saved ${result.updated} attendance rows.`);
+
+        // ✅ Clear table after successful save
+        tableBody.innerHTML = "";
+        setStatus(`Saved ${result.updated} attendance rows. Table cleared – load again if needed.`);
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
