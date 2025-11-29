@@ -40,13 +40,11 @@ def get_attendance(
     # 1) Refresh employee statuses for this 'today'
     refresh_employee_statuses(today=today, db=db)
 
-    # 2) Get employees who are Active and have joined on/before today
+    # 2) Get employees who are currently Active
+    #    (Inactive / Offboarded / Vacation are filtered out)
     active_employees = (
         db.query(Employee)
-        .filter(
-            Employee.joining_date <= today,
-            Employee.current_status == "Active",
-        )
+        .filter(Employee.current_status == "Active")
         .all()
     )
 
