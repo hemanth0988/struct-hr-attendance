@@ -130,7 +130,7 @@
     </table>
   </div>
 
-  <script>
+    <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
 
     const nameInput = document.getElementById("nameInput");
@@ -157,27 +157,26 @@
 
     // --- Helpers to control decimals ---
 
-    // Clean value: only digits + one dot, max 2 decimals
-    function cleanNumberInput(input) {
+    // Allow only one '.' and max 2 digits after it
+    function limitDecimalsOnInput(input) {
       let v = input.value;
       if (!v) return;
 
-      // Remove everything except digits and dots
-      v = v.replace(/[^\d.]/g, "");
-
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
-        const before = v.slice(0, firstDot);
+        // keep everything up to and including the first dot
+        const before = v.slice(0, firstDot + 1);
         let after = v.slice(firstDot + 1);
 
-        // Remove any extra dots in the "after" part
+        // remove any extra dots in the decimal part
         after = after.replace(/\./g, "");
 
-        // Max 2 decimal digits
+        // cap at 2 decimal digits
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
-        v = before + "." + after;
+
+        v = before + after;
       }
 
       input.value = v;
@@ -205,7 +204,8 @@
     numberInputs.forEach(inp => {
       inp.value = ""; // ensure empty by default
       inp.addEventListener("input", () => {
-        cleanNumberInput(inp);
+        limitDecimalsOnInput(inp);
+
         // recalc totals whenever one of the monthly components changes
         if (
           inp === basicMonthlyInput ||
@@ -216,6 +216,7 @@
           recalcTotals();
         }
       });
+
       inp.addEventListener("blur", () => formatTwoDecimals(inp));
     });
 
