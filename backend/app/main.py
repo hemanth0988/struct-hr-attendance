@@ -2,9 +2,10 @@ from fastapi import FastAPI
 
 from .database import Base, engine
 from .models import employee as employee_model
+from .models import attendance as attendance_model
 from .routers import employees as employees_router
 
-# Create tables
+# Create all tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
