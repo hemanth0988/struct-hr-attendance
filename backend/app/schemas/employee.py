@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import date
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class EmployeeBase(BaseModel):
@@ -31,8 +32,13 @@ class EmployeeOut(EmployeeBase):
     emp_code: str
     current_status: str
     status_change_date: Optional[date]
-    upcoming_status: Optional[Optional[str]]
+    upcoming_status: Optional[str]
     total_salary_monthly: float
 
     class Config:
         orm_mode = True
+
+
+class EmployeeStatusUpdate(BaseModel):
+    status_change_date: Optional[date] = None
+    upcoming_status: Optional[str] = None
