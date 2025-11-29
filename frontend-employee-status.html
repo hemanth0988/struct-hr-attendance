@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Struct HR – Employee Status</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1100px;
+      margin: 20px auto;
+      padding: 0 10px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .panel {
+      border: 1px solid #ddd;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    th {
+      background: #f3f3f3;
+    }
+    input[type="date"],
+    select {
+      padding: 3px 4px;
+      font-size: 0.9rem;
+    }
+    #status {
+      margin-left: 10px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Struct HR – Employee Status</h1>
+
+  <div class="panel">
+    <button id="refreshBtn">Refresh Employees</button>
+    <button id="saveAllBtn">Save All Changes</button>
+    <span id="status"></span>
+
+    <table id="employeesTable">
+      <thead>
+        <tr>
+          <th>Emp Code</th>
+          <th>Name</th>
+          <th>Joining Date</th>
+          <th>Current Status</th>
+          <th>Status Change Date</th>
+          <th>Upcoming Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- rows injected -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
+
+    const refreshBtn = document.getElementById("refreshBtn");
+    const saveAllBtn = document.getElementById("saveAllBtn");
+    const employeesTableBody = document.querySelector("#employeesTable tbody");
+    const statusSpan = document.getElementById("status");
+
+    function setStatus(msg, isError = false) {
+      statusSpan.textContent = msg || "";
+      statusSpan.style.color = isError ? "red" : "green";
+    }
+
+    async function loadEmployees() {
+      setStatus("Loading employees...");
+      try {
+        const res = await fetch(`${API_BASE}/employees/`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to fetch employees");
+        }
+        const data = await res.json();
+
+        employeesTableBody.innerHTML = "";
+        data.forEach(emp => {
+          const tr = document.createElement("tr");
+          tr.dataset.employeeId = emp.id;
+
+          const tdCode = document.createElement("td");
+          tdCode.textContent = emp.emp_code;
+
+          const tdName = document.createElement("td");
+          tdName.textContent = emp.name;
+
+          const tdJoin = document.createElement("td");
+          tdJoin.textContent = emp.joining_date;
+
+          const tdCurrent = document.createElement("td");
+          tdCurrent.textContent = emp.current_status;
+
+          const tdChangeDate = document.createElement("td");
+          const dateInput = document.createElement("input");
+          dateInput.type = "date";
+          if (emp.status_change_date) {
+            dateInput.value = emp.status_change_date;
+          }
+          tdChangeDate.appendChild(dateInput);
+
+          const tdUpcoming = document.createElement("td");
+          const select = document.createElement("select");
+          const statuses = ["", "Active", "Offboarded", "Vacation"];
+          statuses.forEach(st => {
+            const opt = document.createElement("option");
+            opt.value = st || "";
+            opt.textContent = st || "-- none --";
+            if (emp.upcoming_status === st) {
+              opt.selected = true;
+            }
+            select.appendChild(opt);
+          });
+          tdUpcoming.appendChild(select);
+
+          tr.appendChild(tdCode);
+          tr.appendChild(tdName);
+          tr.appendChild(tdJoin);
+          tr.appendChild(tdCurrent);
+          tr.appendChild(tdChangeDate);
+          tr.appendChild(tdUpcoming);
+
+          employeesTableBody.appendChild(tr);
+        });
+
+        setStatus(`Loaded ${data.length} employees.`);
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadEmployees);
+
+    saveAllBtn.addEventListener("click", async () => {
+      setStatus("");
+      const rows = Array.from(employeesTableBody.querySelectorAll("tr"));
+      if (rows.length === 0) {
+        setStatus("No employees to update. Refresh first.", true);
+        return;
+      }
+
+      try {
+        setStatus("Saving changes...");
+        let updatedCount = 0;
+
+        for (const tr of rows) {
+          const id = parseInt(tr.dataset.employeeId, 10);
+          const dateInput = tr.querySelector('input[type="date"]');
+          const select = tr.querySelector("select");
+
+          const status_change_date = dateInput.value || null;
+          const upcoming_status = select.value || null;
+
+          // If both empty, we still send to clear any old values
+          const payload = {
+            status_change_date,
+            upcoming_status,
+          };
+
+          const res = await fetch(`${API_BASE}/employees/${id}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(
+              `Failed on ${id}: ` + (err.detail || "Status update error")
+            );
+          }
+          updatedCount += 1;
+        }
+
+        setStatus(`Saved status for ${updatedCount} employees.`);
+        // Reload so we see updated current_status if any dates are "today" next time
+        await loadEmployees();
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    });
+
+    // Initial load
+    loadEmployees();
+  </script>
+</body>
+</html>
