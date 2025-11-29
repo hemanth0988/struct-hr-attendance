@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
 from .models import employee as employee_model
@@ -10,6 +11,15 @@ from .routers import attendance as attendance_router
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Allow frontend (any origin for now – simple for testing)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # later we can restrict to your domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
