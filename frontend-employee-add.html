@@ -121,7 +121,7 @@
           <th>Emp Code</th>
           <th>Name</th>
           <th>Joining Date</th>
-          <th>Current Status</th>
+          <th>Current Status</th> <!-- read-only, as you wanted -->
         </tr>
       </thead>
       <tbody>
@@ -155,7 +155,19 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // Format any number input to 2 decimals on blur
+    // --- Helpers to control decimals ---
+
+    // Limit user typing to max 2 decimal places
+    function limitToTwoDecimals(input) {
+      const v = input.value;
+      if (!v) return;
+      const parts = v.split(".");
+      if (parts.length === 2 && parts[1].length > 2) {
+        input.value = parts[0] + "." + parts[1].slice(0, 2);
+      }
+    }
+
+    // On blur, normalise to exactly 2 decimals (if there is a value)
     function formatTwoDecimals(input) {
       if (input.value !== "") {
         const n = parseFloat(input.value);
@@ -165,9 +177,20 @@
       }
     }
 
-    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput,
-     otherMonthlyInput, paidLeaveDailyInput, vacationDailyInput]
-      .forEach(inp => inp.addEventListener("blur", () => formatTwoDecimals(inp)));
+    const numberInputs = [
+      basicMonthlyInput,
+      transportMonthlyInput,
+      accommodationMonthlyInput,
+      otherMonthlyInput,
+      paidLeaveDailyInput,
+      vacationDailyInput
+    ];
+
+    numberInputs.forEach(inp => {
+      inp.value = "";                       // ensure empty by default
+      inp.addEventListener("input", () => limitToTwoDecimals(inp));
+      inp.addEventListener("blur", () => formatTwoDecimals(inp));
+    });
 
     // Recalculate total + daily whenever any monthly component changes
     function recalcTotals() {
@@ -181,7 +204,7 @@
       if (!isNaN(total) && total > 0) {
         totalMonthlyInput.value = total.toFixed(2);
         const daily = (total / 30).toFixed(2);
-        // Auto-fill daily values (user can still overwrite later)
+        // Auto-fill daily values (user can still overwrite later if needed)
         paidLeaveDailyInput.value = daily;
         vacationDailyInput.value = daily;
       } else {
@@ -194,7 +217,8 @@
     [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput, otherMonthlyInput]
       .forEach(inp => inp.addEventListener("input", recalcTotals));
 
-    // Add new employee
+    // --- Add new employee ---
+
     addBtn.addEventListener("click", async () => {
       setStatus("");
 
@@ -257,7 +281,7 @@
 
         setStatus(`Employee ${emp.emp_code} created successfully.`);
 
-        // Clear form
+        // Clear form (everything blank again)
         nameInput.value = "";
         joiningDateInput.value = "";
         basicMonthlyInput.value = "";
@@ -276,7 +300,8 @@
       }
     });
 
-    // Load employees into table
+    // --- List employees (read-only) ---
+
     async function loadEmployees() {
       try {
         const res = await fetch(`${API_BASE}/employees/`);
@@ -296,7 +321,7 @@
           const tdJoin = document.createElement("td");
           tdJoin.textContent = emp.joining_date;
           const tdStatus = document.createElement("td");
-          tdStatus.textContent = emp.current_status;
+          tdStatus.textContent = emp.current_status; // fixed
           tr.appendChild(tdCode);
           tr.appendChild(tdName);
           tr.appendChild(tdJoin);
@@ -311,7 +336,7 @@
 
     refreshBtn.addEventListener("click", loadEmployees);
 
-    // Load employees on first open
+    // On first load
     loadEmployees();
   </script>
 </body>
