@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Struct HR – Attendance</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 0 10px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .panel {
+      border: 1px solid #ddd;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    input[type="date"] {
+      padding: 4px 6px;
+      margin-right: 10px;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #f3f3f3;
+    }
+    select {
+      padding: 4px 6px;
+    }
+    #status {
+      margin-left: 10px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Struct HR – Attendance</h1>
+
+  <div class="panel">
+    <h3>Step 1 – Select Today & Load Attendance</h3>
+    <label>
+      Today:
+      <input type="date" id="todayInput" />
+    </label>
+    <label>
+      Attendance date:
+      <input type="date" id="attendanceDateInput" readonly />
+    </label>
+    <button id="loadBtn">Load Attendance</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="panel">
+    <h3>Step 2 – Mark Attendance</h3>
+    <table id="attendanceTable">
+      <thead>
+        <tr>
+          <th>Emp Code</th>
+          <th>Name</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- rows will be injected here -->
+      </tbody>
+    </table>
+    <button id="saveBtn" style="margin-top: 10px;">Save Attendance</button>
+  </div>
+
+  <script>
+    // 👇 change this if your domain is different
+    const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
+
+    const todayInput = document.getElementById("todayInput");
+    const attendanceDateInput = document.getElementById("attendanceDateInput");
+    const loadBtn = document.getElementById("loadBtn");
+    const saveBtn = document.getElementById("saveBtn");
+    const tableBody = document.querySelector("#attendanceTable tbody");
+    const statusSpan = document.getElementById("status");
+
+    // When Today changes, Attendance Date follows (locked equal)
+    todayInput.addEventListener("change", () => {
+      attendanceDateInput.value = todayInput.value;
+    });
+
+    // Helper: show small status text
+    function setStatus(msg, isError = false) {
+      statusSpan.textContent = msg || "";
+      statusSpan.style.color = isError ? "red" : "green";
+    }
+
+    // Load attendance list
+    loadBtn.addEventListener("click", async () => {
+      setStatus("");
+      const today = todayInput.value;
+      const attendanceDate = attendanceDateInput.value;
+
+      if (!today || !attendanceDate) {
+        setStatus("Please select Today (Attendance date will auto-fill).", true);
+        return;
+      }
+
+      try {
+        setStatus("Loading...");
+        const url = `${API_BASE}/attendance/?today=${today}&attendance_date=${attendanceDate}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to load attendance");
+        }
+        const data = await res.json();
+
+        // Build table rows
+        tableBody.innerHTML = "";
+        data.forEach(row => {
+          const tr = document.createElement("tr");
+          tr.dataset.employeeId = row.employee_id;
+          tr.dataset.attendanceDate = row.attendance_date;
+
+          const tdCode = document.createElement("td");
+          tdCode.textContent = row.emp_code;
+
+          const tdName = document.createElement("td");
+          tdName.textContent = row.name;
+
+          const tdStatus = document.createElement("td");
+          const select = document.createElement("select");
+          ["Present", "PaidLeave", "UnpaidLeave"].forEach(optVal => {
+            const opt = document.createElement("option");
+            opt.value = optVal;
+            opt.textContent = optVal;
+            if (row.status === optVal) {
+              opt.selected = true;
+            }
+            select.appendChild(opt);
+          });
+          tdStatus.appendChild(select);
+
+          tr.appendChild(tdCode);
+          tr.appendChild(tdName);
+          tr.appendChild(tdStatus);
+          tableBody.appendChild(tr);
+        });
+
+        setStatus(`Loaded ${data.length} active employees.`);
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    });
+
+    // Save attendance
+    saveBtn.addEventListener("click", async () => {
+      setStatus("");
+
+      const rows = Array.from(tableBody.querySelectorAll("tr"));
+      if (rows.length === 0) {
+        setStatus("No rows to save – load attendance first.", true);
+        return;
+      }
+
+      const items = rows.map(tr => {
+        const employeeId = parseInt(tr.dataset.employeeId, 10);
+        const attendanceDate = tr.dataset.attendanceDate;
+        const statusSelect = tr.querySelector("select");
+        return {
+          employee_id: employeeId,
+          attendance_date: attendanceDate,
+          status: statusSelect.value
+        };
+      });
+
+      try {
+        setStatus("Saving...");
+        const res = await fetch(`${API_BASE}/attendance/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to save attendance");
+        }
+        const result = await res.json();
+        setStatus(`Saved ${result.updated} attendance rows.`);
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    });
+  </script>
+</body>
+</html>
