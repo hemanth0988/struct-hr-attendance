@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Struct HR – Add Employee</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 0 10px;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .panel {
+      border: 1px solid #ddd;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    label {
+      display: inline-block;
+      width: 180px;
+      margin-bottom: 6px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="date"] {
+      padding: 4px 6px;
+      width: 200px;
+    }
+    button {
+      padding: 6px 12px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #f3f3f3;
+    }
+    #status {
+      margin-left: 10px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Struct HR – Add Employee</h1>
+
+  <div class="panel">
+    <h3>Step 1 – New Employee Details</h3>
+
+    <div>
+      <label for="nameInput">Name:</label>
+      <input type="text" id="nameInput" />
+    </div>
+
+    <div>
+      <label for="joiningDateInput">Joining date:</label>
+      <input type="date" id="joiningDateInput" />
+    </div>
+
+    <h4>Monthly salary components</h4>
+
+    <div>
+      <label for="basicMonthlyInput">Basic pay (monthly):</label>
+      <input type="number" id="basicMonthlyInput" step="0.01" />
+    </div>
+    <div>
+      <label for="transportMonthlyInput">Transport (monthly):</label>
+      <input type="number" id="transportMonthlyInput" step="0.01" value="0" />
+    </div>
+    <div>
+      <label for="accommodationMonthlyInput">Accommodation (monthly):</label>
+      <input type="number" id="accommodationMonthlyInput" step="0.01" value="0" />
+    </div>
+    <div>
+      <label for="otherMonthlyInput">Other (monthly):</label>
+      <input type="number" id="otherMonthlyInput" step="0.01" value="0" />
+    </div>
+
+    <h4>Leave-related daily amounts</h4>
+
+    <div>
+      <label for="paidLeaveDailyInput">Paid leave (daily):</label>
+      <input type="number" id="paidLeaveDailyInput" step="0.01" />
+    </div>
+    <div>
+      <label for="vacationDailyInput">Vacation pay (daily):</label>
+      <input type="number" id="vacationDailyInput" step="0.01" />
+    </div>
+
+    <button id="addBtn">Add Employee</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="panel">
+    <h3>Step 2 – Current Employees (read-only)</h3>
+    <button id="refreshBtn">Refresh List</button>
+    <table id="employeesTable">
+      <thead>
+        <tr>
+          <th>Emp Code</th>
+          <th>Name</th>
+          <th>Joining Date</th>
+          <th>Current Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- rows injected here -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
+
+    const nameInput = document.getElementById("nameInput");
+    const joiningDateInput = document.getElementById("joiningDateInput");
+
+    const basicMonthlyInput = document.getElementById("basicMonthlyInput");
+    const transportMonthlyInput = document.getElementById("transportMonthlyInput");
+    const accommodationMonthlyInput = document.getElementById("accommodationMonthlyInput");
+    const otherMonthlyInput = document.getElementById("otherMonthlyInput");
+
+    const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
+    const vacationDailyInput = document.getElementById("vacationDailyInput");
+
+    const addBtn = document.getElementById("addBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const statusSpan = document.getElementById("status");
+    const employeesTableBody = document.querySelector("#employeesTable tbody");
+
+    function setStatus(msg, isError = false) {
+      statusSpan.textContent = msg || "";
+      statusSpan.style.color = isError ? "red" : "green";
+    }
+
+    // Auto-fill paid/vacation daily from basic / 30 (user can edit)
+    basicMonthlyInput.addEventListener("input", () => {
+      const basic = parseFloat(basicMonthlyInput.value || "0");
+      if (basic > 0) {
+        const daily = (basic / 30).toFixed(2);
+        if (!paidLeaveDailyInput.value) paidLeaveDailyInput.value = daily;
+        if (!vacationDailyInput.value) vacationDailyInput.value = daily;
+      }
+    });
+
+    // Add new employee
+    addBtn.addEventListener("click", async () => {
+      setStatus("");
+
+      const name = nameInput.value.trim();
+      const joiningDate = joiningDateInput.value;
+
+      if (!name || !joiningDate) {
+        setStatus("Name and Joining date are required.", true);
+        return;
+      }
+
+      const basicMonthly = parseFloat(basicMonthlyInput.value || "0");
+      const transportMonthly = parseFloat(transportMonthlyInput.value || "0");
+      const accommodationMonthly = parseFloat(accommodationMonthlyInput.value || "0");
+      const otherMonthly = parseFloat(otherMonthlyInput.value || "0");
+
+      const paidLeaveDaily = parseFloat(paidLeaveDailyInput.value || "0");
+      const vacationDaily = parseFloat(vacationDailyInput.value || "0");
+
+      const payload = {
+        name: name,
+        joining_date: joiningDate,
+        basic_pay_monthly: basicMonthly,
+        transport_monthly: transportMonthly,
+        accommodation_monthly: accommodationMonthly,
+        other_monthly: otherMonthly,
+        paid_leave_daily: paidLeaveDaily,
+        vacation_pay_daily: vacationDaily
+      };
+
+      try {
+        setStatus("Saving...");
+        const res = await fetch(`${API_BASE}/employees/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to create employee");
+        }
+        const emp = await res.json();
+
+        setStatus(`Employee ${emp.emp_code} created successfully.`);
+
+        // Clear form
+        nameInput.value = "";
+        joiningDateInput.value = "";
+        basicMonthlyInput.value = "";
+        transportMonthlyInput.value = "0";
+        accommodationMonthlyInput.value = "0";
+        otherMonthlyInput.value = "0";
+        paidLeaveDailyInput.value = "";
+        vacationDailyInput.value = "";
+
+        // Refresh list automatically
+        await loadEmployees();
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    });
+
+    // Load employees into table
+    async function loadEmployees() {
+      try {
+        const res = await fetch(`${API_BASE}/employees/`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to fetch employees");
+        }
+        const data = await res.json();
+
+        employeesTableBody.innerHTML = "";
+        data.forEach(emp => {
+          const tr = document.createElement("tr");
+          const tdCode = document.createElement("td");
+          tdCode.textContent = emp.emp_code;
+          const tdName = document.createElement("td");
+          tdName.textContent = emp.name;
+          const tdJoin = document.createElement("td");
+          tdJoin.textContent = emp.joining_date;
+          const tdStatus = document.createElement("td");
+          tdStatus.textContent = emp.current_status;
+          tr.appendChild(tdCode);
+          tr.appendChild(tdName);
+          tr.appendChild(tdJoin);
+          tr.appendChild(tdStatus);
+          employeesTableBody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error(e);
+        // Show error but don't block UI
+        setStatus(e.message, true);
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadEmployees);
+
+    // Load employees on first open
+    loadEmployees();
+  </script>
+</body>
+</html>
