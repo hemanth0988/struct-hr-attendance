@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -30,6 +32,13 @@ def create_employee(employee_in: EmployeeCreate, db: Session = Depends(get_db)):
         + employee_in.other_monthly
     )
 
+    # Decide initial current_status based on joining date vs REAL today
+    today_real = date.today()
+    if employee_in.joining_date > today_real:
+        initial_status = "Inactive"  # future joinee
+    else:
+        initial_status = "Active"
+
     db_employee = Employee(
         name=employee_in.name,
         joining_date=employee_in.joining_date,
@@ -40,7 +49,7 @@ def create_employee(employee_in: EmployeeCreate, db: Session = Depends(get_db)):
         total_salary_monthly=total_salary_monthly,
         paid_leave_daily=employee_in.paid_leave_daily,
         vacation_pay_daily=employee_in.vacation_pay_daily,
-        current_status="Active",  # default on create
+        current_status=initial_status,
     )
 
     db.add(db_employee)
