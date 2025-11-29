@@ -25,7 +25,6 @@
       margin-bottom: 6px;
     }
     input[type="text"],
-    input[type="number"],
     input[type="date"] {
       padding: 4px 6px;
       width: 200px;
@@ -77,35 +76,35 @@
 
     <div>
       <label for="basicMonthlyInput">Basic pay (monthly)</label>
-      <input type="number" id="basicMonthlyInput" step="0.01" min="0" />
+      <input type="text" id="basicMonthlyInput" />
     </div>
     <div>
       <label for="transportMonthlyInput">Transport (monthly)</label>
-      <input type="number" id="transportMonthlyInput" step="0.01" min="0" />
+      <input type="text" id="transportMonthlyInput" />
     </div>
     <div>
       <label for="accommodationMonthlyInput">Accommodation (monthly)</label>
-      <input type="number" id="accommodationMonthlyInput" step="0.01" min="0" />
+      <input type="text" id="accommodationMonthlyInput" />
     </div>
     <div>
       <label for="otherMonthlyInput">Other (monthly)</label>
-      <input type="number" id="otherMonthlyInput" step="0.01" min="0" />
+      <input type="text" id="otherMonthlyInput" />
     </div>
 
     <div>
       <label for="totalMonthlyInput">Total salary (monthly)</label>
-      <input type="number" id="totalMonthlyInput" step="0.01" readonly />
+      <input type="text" id="totalMonthlyInput" readonly />
     </div>
 
     <h4>Leave-related daily amounts *</h4>
 
     <div>
       <label for="paidLeaveDailyInput">Paid leave (daily)</label>
-      <input type="number" id="paidLeaveDailyInput" step="0.01" min="0" />
+      <input type="text" id="paidLeaveDailyInput" />
     </div>
     <div>
       <label for="vacationDailyInput">Vacation pay (daily)</label>
-      <input type="number" id="vacationDailyInput" step="0.01" min="0" />
+      <input type="text" id="vacationDailyInput" />
     </div>
 
     <button id="addBtn">Add Employee</button>
@@ -121,7 +120,7 @@
           <th>Emp Code</th>
           <th>Name</th>
           <th>Joining Date</th>
-          <th>Current Status</th> <!-- read-only, as you wanted -->
+          <th>Current Status</th>
         </tr>
       </thead>
       <tbody>
@@ -130,7 +129,7 @@
     </table>
   </div>
 
-    <script>
+  <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
 
     const nameInput = document.getElementById("nameInput");
@@ -155,23 +154,24 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // --- Helpers to control decimals ---
+    // -------- Decimal helpers (for text inputs) --------
 
-    // Allow only one '.' and max 2 digits after it
-    function limitDecimalsOnInput(input) {
+    // Only digits + one dot, max 2 decimals
+    function cleanMoneyInput(input) {
       let v = input.value;
-      if (!v) return;
+
+      // remove everything except digits and .
+      v = v.replace(/[^\d.]/g, "");
 
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
-        // keep everything up to and including the first dot
-        const before = v.slice(0, firstDot + 1);
+        const before = v.slice(0, firstDot + 1); // include the dot
         let after = v.slice(firstDot + 1);
 
         // remove any extra dots in the decimal part
         after = after.replace(/\./g, "");
 
-        // cap at 2 decimal digits
+        // cap decimals at 2 digits
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
@@ -182,17 +182,18 @@
       input.value = v;
     }
 
-    // On blur, normalise to exactly 2 decimals (if there is a value)
-    function formatTwoDecimals(input) {
-      if (input.value !== "") {
-        const n = parseFloat(input.value);
-        if (!isNaN(n)) {
-          input.value = n.toFixed(2);
-        }
+    // On blur, normalise to exactly 2 decimals (if value is valid)
+    function normaliseTwoDecimals(input) {
+      if (input.value === "") return;
+      const n = parseFloat(input.value);
+      if (isNaN(n)) {
+        input.value = "";
+      } else {
+        input.value = n.toFixed(2);
       }
     }
 
-    const numberInputs = [
+    const moneyInputs = [
       basicMonthlyInput,
       transportMonthlyInput,
       accommodationMonthlyInput,
@@ -201,12 +202,15 @@
       vacationDailyInput
     ];
 
-    numberInputs.forEach(inp => {
+    moneyInputs.forEach(inp => {
       inp.value = ""; // ensure empty by default
-      inp.addEventListener("input", () => {
-        limitDecimalsOnInput(inp);
 
-        // recalc totals whenever one of the monthly components changes
+      inp.addEventListener("input", () => {
+        const oldCursor = inp.selectionStart;
+        cleanMoneyInput(inp);
+        // try to keep cursor roughly where it was
+        inp.selectionStart = inp.selectionEnd = oldCursor;
+
         if (
           inp === basicMonthlyInput ||
           inp === transportMonthlyInput ||
@@ -217,22 +221,35 @@
         }
       });
 
-      inp.addEventListener("blur", () => formatTwoDecimals(inp));
+      inp.addEventListener("blur", () => {
+        normaliseTwoDecimals(inp);
+        if (
+          inp === basicMonthlyInput ||
+          inp === transportMonthlyInput ||
+          inp === accommodationMonthlyInput ||
+          inp === otherMonthlyInput
+        ) {
+          recalcTotals();
+        }
+      });
     });
 
-    // Recalculate total + daily whenever any monthly component changes
+    function valueOrZero(inp) {
+      const n = parseFloat(inp.value);
+      return isNaN(n) ? 0 : n;
+    }
+
     function recalcTotals() {
-      const bm = parseFloat(basicMonthlyInput.value || "0");
-      const tm = parseFloat(transportMonthlyInput.value || "0");
-      const am = parseFloat(accommodationMonthlyInput.value || "0");
-      const om = parseFloat(otherMonthlyInput.value || "0");
+      const bm = valueOrZero(basicMonthlyInput);
+      const tm = valueOrZero(transportMonthlyInput);
+      const am = valueOrZero(accommodationMonthlyInput);
+      const om = valueOrZero(otherMonthlyInput);
 
       const total = bm + tm + am + om;
 
-      if (!isNaN(total) && total > 0) {
+      if (total > 0) {
         totalMonthlyInput.value = total.toFixed(2);
         const daily = (total / 30).toFixed(2);
-        // Auto-fill daily values (user can still overwrite later if needed)
         paidLeaveDailyInput.value = daily;
         vacationDailyInput.value = daily;
       } else {
@@ -242,7 +259,7 @@
       }
     }
 
-    // --- Add new employee ---
+    // -------- Add Employee --------
 
     addBtn.addEventListener("click", async () => {
       setStatus("");
@@ -255,7 +272,6 @@
         return;
       }
 
-      // Ensure all monthly components are filled
       if (
         basicMonthlyInput.value === "" ||
         transportMonthlyInput.value === "" ||
@@ -266,19 +282,18 @@
         return;
       }
 
-      // Ensure daily values are filled (normally auto-calculated)
       if (paidLeaveDailyInput.value === "" || vacationDailyInput.value === "") {
         setStatus("Paid leave daily and Vacation daily are required.", true);
         return;
       }
 
-      const basicMonthly = parseFloat(basicMonthlyInput.value);
-      const transportMonthly = parseFloat(transportMonthlyInput.value);
-      const accommodationMonthly = parseFloat(accommodationMonthlyInput.value);
-      const otherMonthly = parseFloat(otherMonthlyInput.value);
+      const basicMonthly = valueOrZero(basicMonthlyInput);
+      const transportMonthly = valueOrZero(transportMonthlyInput);
+      const accommodationMonthly = valueOrZero(accommodationMonthlyInput);
+      const otherMonthly = valueOrZero(otherMonthlyInput);
 
-      const paidLeaveDaily = parseFloat(paidLeaveDailyInput.value);
-      const vacationDaily = parseFloat(vacationDailyInput.value);
+      const paidLeaveDaily = valueOrZero(paidLeaveDailyInput);
+      const vacationDaily = valueOrZero(vacationDailyInput);
 
       const payload = {
         name: name,
@@ -317,7 +332,6 @@
         paidLeaveDailyInput.value = "";
         vacationDailyInput.value = "";
 
-        // Refresh list automatically
         await loadEmployees();
       } catch (e) {
         console.error(e);
@@ -325,7 +339,7 @@
       }
     });
 
-    // --- List employees (read-only) ---
+    // -------- List Employees (bottom table) --------
 
     async function loadEmployees() {
       try {
