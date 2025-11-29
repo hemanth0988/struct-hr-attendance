@@ -157,14 +157,30 @@
 
     // --- Helpers to control decimals ---
 
-    // Limit user typing to max 2 decimal places
-    function limitToTwoDecimals(input) {
-      const v = input.value;
+    // Clean value: only digits + one dot, max 2 decimals
+    function cleanNumberInput(input) {
+      let v = input.value;
       if (!v) return;
-      const parts = v.split(".");
-      if (parts.length === 2 && parts[1].length > 2) {
-        input.value = parts[0] + "." + parts[1].slice(0, 2);
+
+      // Remove everything except digits and dots
+      v = v.replace(/[^\d.]/g, "");
+
+      const firstDot = v.indexOf(".");
+      if (firstDot !== -1) {
+        const before = v.slice(0, firstDot);
+        let after = v.slice(firstDot + 1);
+
+        // Remove any extra dots in the "after" part
+        after = after.replace(/\./g, "");
+
+        // Max 2 decimal digits
+        if (after.length > 2) {
+          after = after.slice(0, 2);
+        }
+        v = before + "." + after;
       }
+
+      input.value = v;
     }
 
     // On blur, normalise to exactly 2 decimals (if there is a value)
@@ -187,8 +203,19 @@
     ];
 
     numberInputs.forEach(inp => {
-      inp.value = "";                       // ensure empty by default
-      inp.addEventListener("input", () => limitToTwoDecimals(inp));
+      inp.value = ""; // ensure empty by default
+      inp.addEventListener("input", () => {
+        cleanNumberInput(inp);
+        // recalc totals whenever one of the monthly components changes
+        if (
+          inp === basicMonthlyInput ||
+          inp === transportMonthlyInput ||
+          inp === accommodationMonthlyInput ||
+          inp === otherMonthlyInput
+        ) {
+          recalcTotals();
+        }
+      });
       inp.addEventListener("blur", () => formatTwoDecimals(inp));
     });
 
@@ -214,9 +241,6 @@
       }
     }
 
-    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput, otherMonthlyInput]
-      .forEach(inp => inp.addEventListener("input", recalcTotals));
-
     // --- Add new employee ---
 
     addBtn.addEventListener("click", async () => {
@@ -241,7 +265,7 @@
         return;
       }
 
-      // Ensure daily values are filled (should be auto-calculated)
+      // Ensure daily values are filled (normally auto-calculated)
       if (paidLeaveDailyInput.value === "" || vacationDailyInput.value === "") {
         setStatus("Paid leave daily and Vacation daily are required.", true);
         return;
@@ -281,7 +305,7 @@
 
         setStatus(`Employee ${emp.emp_code} created successfully.`);
 
-        // Clear form (everything blank again)
+        // Clear form
         nameInput.value = "";
         joiningDateInput.value = "";
         basicMonthlyInput.value = "";
@@ -321,7 +345,7 @@
           const tdJoin = document.createElement("td");
           tdJoin.textContent = emp.joining_date;
           const tdStatus = document.createElement("td");
-          tdStatus.textContent = emp.current_status; // fixed
+          tdStatus.textContent = emp.current_status;
           tr.appendChild(tdCode);
           tr.appendChild(tdName);
           tr.appendChild(tdJoin);
@@ -336,7 +360,7 @@
 
     refreshBtn.addEventListener("click", loadEmployees);
 
-    // On first load
+    // Initial load
     loadEmployees();
   </script>
 </body>
