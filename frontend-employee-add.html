@@ -21,7 +21,7 @@
     }
     label {
       display: inline-block;
-      width: 180px;
+      width: 200px;
       margin-bottom: 6px;
     }
     input[type="text"],
@@ -29,6 +29,9 @@
     input[type="date"] {
       padding: 4px 6px;
       width: 200px;
+    }
+    input[readonly] {
+      background: #f7f7f7;
     }
     button {
       padding: 6px 12px;
@@ -61,43 +64,48 @@
     <h3>Step 1 – New Employee Details</h3>
 
     <div>
-      <label for="nameInput">Name:</label>
+      <label for="nameInput">Name *</label>
       <input type="text" id="nameInput" />
     </div>
 
     <div>
-      <label for="joiningDateInput">Joining date:</label>
+      <label for="joiningDateInput">Joining date *</label>
       <input type="date" id="joiningDateInput" />
     </div>
 
-    <h4>Monthly salary components</h4>
+    <h4>Monthly salary components *</h4>
 
     <div>
-      <label for="basicMonthlyInput">Basic pay (monthly):</label>
-      <input type="number" id="basicMonthlyInput" step="0.01" />
+      <label for="basicMonthlyInput">Basic pay (monthly)</label>
+      <input type="number" id="basicMonthlyInput" step="0.01" min="0" />
     </div>
     <div>
-      <label for="transportMonthlyInput">Transport (monthly):</label>
-      <input type="number" id="transportMonthlyInput" step="0.01" value="0" />
+      <label for="transportMonthlyInput">Transport (monthly)</label>
+      <input type="number" id="transportMonthlyInput" step="0.01" min="0" />
     </div>
     <div>
-      <label for="accommodationMonthlyInput">Accommodation (monthly):</label>
-      <input type="number" id="accommodationMonthlyInput" step="0.01" value="0" />
+      <label for="accommodationMonthlyInput">Accommodation (monthly)</label>
+      <input type="number" id="accommodationMonthlyInput" step="0.01" min="0" />
     </div>
     <div>
-      <label for="otherMonthlyInput">Other (monthly):</label>
-      <input type="number" id="otherMonthlyInput" step="0.01" value="0" />
+      <label for="otherMonthlyInput">Other (monthly)</label>
+      <input type="number" id="otherMonthlyInput" step="0.01" min="0" />
     </div>
 
-    <h4>Leave-related daily amounts</h4>
+    <div>
+      <label for="totalMonthlyInput">Total salary (monthly)</label>
+      <input type="number" id="totalMonthlyInput" step="0.01" readonly />
+    </div>
+
+    <h4>Leave-related daily amounts *</h4>
 
     <div>
-      <label for="paidLeaveDailyInput">Paid leave (daily):</label>
-      <input type="number" id="paidLeaveDailyInput" step="0.01" />
+      <label for="paidLeaveDailyInput">Paid leave (daily)</label>
+      <input type="number" id="paidLeaveDailyInput" step="0.01" min="0" />
     </div>
     <div>
-      <label for="vacationDailyInput">Vacation pay (daily):</label>
-      <input type="number" id="vacationDailyInput" step="0.01" />
+      <label for="vacationDailyInput">Vacation pay (daily)</label>
+      <input type="number" id="vacationDailyInput" step="0.01" min="0" />
     </div>
 
     <button id="addBtn">Add Employee</button>
@@ -132,6 +140,7 @@
     const transportMonthlyInput = document.getElementById("transportMonthlyInput");
     const accommodationMonthlyInput = document.getElementById("accommodationMonthlyInput");
     const otherMonthlyInput = document.getElementById("otherMonthlyInput");
+    const totalMonthlyInput = document.getElementById("totalMonthlyInput");
 
     const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
     const vacationDailyInput = document.getElementById("vacationDailyInput");
@@ -146,15 +155,44 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // Auto-fill paid/vacation daily from basic / 30 (user can edit)
-    basicMonthlyInput.addEventListener("input", () => {
-      const basic = parseFloat(basicMonthlyInput.value || "0");
-      if (basic > 0) {
-        const daily = (basic / 30).toFixed(2);
-        if (!paidLeaveDailyInput.value) paidLeaveDailyInput.value = daily;
-        if (!vacationDailyInput.value) vacationDailyInput.value = daily;
+    // Format any number input to 2 decimals on blur
+    function formatTwoDecimals(input) {
+      if (input.value !== "") {
+        const n = parseFloat(input.value);
+        if (!isNaN(n)) {
+          input.value = n.toFixed(2);
+        }
       }
-    });
+    }
+
+    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput,
+     otherMonthlyInput, paidLeaveDailyInput, vacationDailyInput]
+      .forEach(inp => inp.addEventListener("blur", () => formatTwoDecimals(inp)));
+
+    // Recalculate total + daily whenever any monthly component changes
+    function recalcTotals() {
+      const bm = parseFloat(basicMonthlyInput.value || "0");
+      const tm = parseFloat(transportMonthlyInput.value || "0");
+      const am = parseFloat(accommodationMonthlyInput.value || "0");
+      const om = parseFloat(otherMonthlyInput.value || "0");
+
+      const total = bm + tm + am + om;
+
+      if (!isNaN(total) && total > 0) {
+        totalMonthlyInput.value = total.toFixed(2);
+        const daily = (total / 30).toFixed(2);
+        // Auto-fill daily values (user can still overwrite later)
+        paidLeaveDailyInput.value = daily;
+        vacationDailyInput.value = daily;
+      } else {
+        totalMonthlyInput.value = "";
+        paidLeaveDailyInput.value = "";
+        vacationDailyInput.value = "";
+      }
+    }
+
+    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput, otherMonthlyInput]
+      .forEach(inp => inp.addEventListener("input", recalcTotals));
 
     // Add new employee
     addBtn.addEventListener("click", async () => {
@@ -168,13 +206,30 @@
         return;
       }
 
-      const basicMonthly = parseFloat(basicMonthlyInput.value || "0");
-      const transportMonthly = parseFloat(transportMonthlyInput.value || "0");
-      const accommodationMonthly = parseFloat(accommodationMonthlyInput.value || "0");
-      const otherMonthly = parseFloat(otherMonthlyInput.value || "0");
+      // Ensure all monthly components are filled
+      if (
+        basicMonthlyInput.value === "" ||
+        transportMonthlyInput.value === "" ||
+        accommodationMonthlyInput.value === "" ||
+        otherMonthlyInput.value === ""
+      ) {
+        setStatus("All monthly salary components are required.", true);
+        return;
+      }
 
-      const paidLeaveDaily = parseFloat(paidLeaveDailyInput.value || "0");
-      const vacationDaily = parseFloat(vacationDailyInput.value || "0");
+      // Ensure daily values are filled (should be auto-calculated)
+      if (paidLeaveDailyInput.value === "" || vacationDailyInput.value === "") {
+        setStatus("Paid leave daily and Vacation daily are required.", true);
+        return;
+      }
+
+      const basicMonthly = parseFloat(basicMonthlyInput.value);
+      const transportMonthly = parseFloat(transportMonthlyInput.value);
+      const accommodationMonthly = parseFloat(accommodationMonthlyInput.value);
+      const otherMonthly = parseFloat(otherMonthlyInput.value);
+
+      const paidLeaveDaily = parseFloat(paidLeaveDailyInput.value);
+      const vacationDaily = parseFloat(vacationDailyInput.value);
 
       const payload = {
         name: name,
@@ -206,9 +261,10 @@
         nameInput.value = "";
         joiningDateInput.value = "";
         basicMonthlyInput.value = "";
-        transportMonthlyInput.value = "0";
-        accommodationMonthlyInput.value = "0";
-        otherMonthlyInput.value = "0";
+        transportMonthlyInput.value = "";
+        accommodationMonthlyInput.value = "";
+        otherMonthlyInput.value = "";
+        totalMonthlyInput.value = "";
         paidLeaveDailyInput.value = "";
         vacationDailyInput.value = "";
 
@@ -249,7 +305,6 @@
         });
       } catch (e) {
         console.error(e);
-        // Show error but don't block UI
         setStatus(e.message, true);
       }
     }
