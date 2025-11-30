@@ -205,7 +205,7 @@
           }
 
           updates.push({
-            id: empId,
+            emp_code: empCode,
             upcoming_status: statusValue,
             status_change_date: dateValue
           });
@@ -221,7 +221,7 @@
         // Send all PATCH requests in parallel
         await Promise.all(
           updates.map(u =>
-            fetch(`${API_BASE}/employees/${u.id}/status`, {
+            fetch(`${API_BASE}/employees/${u.emp_code}/status`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
