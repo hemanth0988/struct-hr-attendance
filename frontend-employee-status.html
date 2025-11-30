@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 1100px;
+      max-width: 1000px;
       margin: 20px auto;
       padding: 0 10px;
     }
@@ -18,11 +18,13 @@
       padding: 12px;
       border-radius: 6px;
       margin-bottom: 16px;
+      background: #fafafa;
     }
     button {
       padding: 6px 12px;
-      margin-right: 8px;
       cursor: pointer;
+      margin-right: 8px;
+      margin-top: 4px;
     }
     table {
       width: 100%;
@@ -37,248 +39,151 @@
     th {
       background: #f3f3f3;
     }
-    input[type="date"] {
-      padding: 4px 6px;
-    }
-    select {
-      padding: 4px 6px;
-    }
-    #statusMessage {
-      margin-left: 10px;
+    #statusMsg {
       font-size: 0.9rem;
+      margin-left: 8px;
+    }
+    #todayWarning {
+      color: red;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      display: none;
     }
   </style>
 </head>
 <body>
   <h1>Struct HR – Employee Status</h1>
 
-  <div class="panel">
-    <button id="refreshBtn">Refresh Employees</button>
-    <button id="saveBtn">Save All Changes</button>
-    <span id="statusMessage"></span>
+  <div id="todayWarning">
+    Please set <strong>Today</strong> at the top before viewing employee status.
+  </div>
 
-    <table id="employeesTable">
+  <div class="panel">
+    <h3>Current Employee Status (read-only)</h3>
+    <div>
+      <button id="reloadBtn">Reload Status</button>
+      <span id="statusMsg"></span>
+    </div>
+
+    <table id="statusTable">
       <thead>
         <tr>
           <th>Emp Code</th>
           <th>Name</th>
           <th>Joining Date</th>
           <th>Current Status</th>
-          <th>Status Change Date</th>
-          <th>Upcoming Status</th>
         </tr>
       </thead>
       <tbody>
-        <!-- rows added here -->
+        <!-- rows injected here -->
       </tbody>
     </table>
   </div>
 
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
+    const TODAY_KEY = "struct_hr_manual_today_global";
 
-    const refreshBtn = document.getElementById("refreshBtn");
-    const saveBtn = document.getElementById("saveBtn");
-    const statusMessage = document.getElementById("statusMessage");
-    const tbody = document.querySelector("#employeesTable tbody");
+    const reloadBtn = document.getElementById("reloadBtn");
+    const statusMsg = document.getElementById("statusMsg");
+    const statusTableBody = document.querySelector("#statusTable tbody");
+    const todayWarning = document.getElementById("todayWarning");
 
-    let employees = []; // latest list from backend
-
-    function setStatus(msg, isError = false) {
-      statusMessage.textContent = msg || "";
-      statusMessage.style.color = isError ? "red" : "green";
+    function setMsg(msg, isError = false) {
+      statusMsg.textContent = msg || "";
+      statusMsg.style.color = isError ? "red" : "green";
     }
 
-    function formatDateForInput(value) {
-      if (!value) return "";
-      // if backend returns "YYYY-MM-DD" it's fine; if ISO with time, trim
-      return value.slice(0, 10);
+    function getManualToday() {
+      return localStorage.getItem(TODAY_KEY) || "";
     }
 
-    async function loadEmployees() {
+    function updateTodayRequirement() {
+      const today = getManualToday();
+      if (!today) {
+        todayWarning.style.display = "block";
+        reloadBtn.disabled = true;
+        statusTableBody.innerHTML = "";
+        setMsg("Set Today at the top to load employee statuses.", true);
+        return false;
+      } else {
+        todayWarning.style.display = "none";
+        reloadBtn.disabled = false;
+        setMsg("");
+        return true;
+      }
+    }
+
+    async function loadStatuses() {
+      setMsg("");
+
+      if (!updateTodayRequirement()) {
+        return;
+      }
+
+      const today = getManualToday();
+
       try {
-        setStatus("Loading employees...");
-        const res = await fetch(`${API_BASE}/employees/`);
+        setMsg("Loading...");
+        // Pass Today as a query parameter – backend can start using this later
+        const res = await fetch(`${API_BASE}/employees/?today=${encodeURIComponent(today)}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || "Failed to fetch employees");
         }
-        employees = await res.json();
-        renderTable();
-        setStatus(`Loaded ${employees.length} employees.`);
+        const data = await res.json();
+
+        statusTableBody.innerHTML = "";
+
+        if (!Array.isArray(data) || data.length === 0) {
+          setMsg("No employees found.", true);
+          return;
+        }
+
+        data.forEach(emp => {
+          const tr = document.createElement("tr");
+
+          const tdCode = document.createElement("td");
+          tdCode.textContent = emp.emp_code;
+
+          const tdName = document.createElement("td");
+          tdName.textContent = emp.name;
+
+          const tdJoin = document.createElement("td");
+          tdJoin.textContent = emp.joining_date;
+
+          const tdStatus = document.createElement("td");
+          tdStatus.textContent = emp.current_status;
+
+          tr.appendChild(tdCode);
+          tr.appendChild(tdName);
+          tr.appendChild(tdJoin);
+          tr.appendChild(tdStatus);
+          statusTableBody.appendChild(tr);
+        });
+
+        setMsg(`Loaded ${data.length} employees for Today = ${today}.`);
       } catch (e) {
         console.error(e);
-        setStatus(e.message, true);
+        setMsg(e.message, true);
       }
     }
 
-    function renderTable() {
-      tbody.innerHTML = "";
+    // Button click
+    reloadBtn.addEventListener("click", loadStatuses);
 
-      employees.forEach(emp => {
-        const tr = document.createElement("tr");
-        tr.dataset.empId = emp.id;
-
-        const tdCode = document.createElement("td");
-        tdCode.textContent = emp.emp_code;
-
-        const tdName = document.createElement("td");
-        tdName.textContent = emp.name;
-
-        const tdJoin = document.createElement("td");
-        tdJoin.textContent = emp.joining_date;
-
-        const tdCurrent = document.createElement("td");
-        tdCurrent.textContent = emp.current_status;
-
-        const tdChangeDate = document.createElement("td");
-        const changeInput = document.createElement("input");
-        changeInput.type = "date";
-        changeInput.value = formatDateForInput(emp.status_change_date || "");
-        tdChangeDate.appendChild(changeInput);
-
-        const tdUpcoming = document.createElement("td");
-        const sel = document.createElement("select");
-
-        // Placeholder option (not an actual status)
-        const optPlaceholder = document.createElement("option");
-        optPlaceholder.value = "";
-        optPlaceholder.textContent = "--";
-        sel.appendChild(optPlaceholder);
-
-        // Actual statuses user can choose
-        ["Active", "Vacation", "Offboarded"].forEach(status => {
-          const opt = document.createElement("option");
-          opt.value = status;
-          opt.textContent = status;
-          sel.appendChild(opt);
-        });
-
-        sel.value = emp.upcoming_status || "";
-        tdUpcoming.appendChild(sel);
-
-        tr.appendChild(tdCode);
-        tr.appendChild(tdName);
-        tr.appendChild(tdJoin);
-        tr.appendChild(tdCurrent);
-        tr.appendChild(tdChangeDate);
-        tr.appendChild(tdUpcoming);
-
-        tbody.appendChild(tr);
-      });
-    }
-
-    saveBtn.addEventListener("click", async () => {
-      try {
-        setStatus("");
-
-        const rows = Array.from(tbody.querySelectorAll("tr"));
-        if (!rows.length) {
-          setStatus("No employees to update.");
-          return;
-        }
-
-        const updates = [];
-
-        for (const tr of rows) {
-          const empId = tr.dataset.empId;
-          const dateInput = tr.querySelector('input[type="date"]');
-          const select = tr.querySelector("select");
-
-          const statusValue = select.value || null;
-          const dateValue = dateInput.value || null;
-
-          // If user has not set either, skip (no upcoming change)
-          if (!statusValue && !dateValue) {
-            continue;
-          }
-
-          // If user sets one but not the other -> that's invalid
-          const empCode = tr.children[0].textContent;
-          if (statusValue && !dateValue) {
-            setStatus(`Please set a Status Change Date for ${empCode}.`, true);
-            return;
-          }
-          if (!statusValue && dateValue) {
-            setStatus(`Please choose an Upcoming Status for ${empCode}.`, true);
-            return;
-          }
-
-          updates.push({
-            emp_code: empCode,
-            upcoming_status: statusValue,
-            status_change_date: dateValue
-          });
-        }
-
-        if (!updates.length) {
-          setStatus("No changes to save.");
-          return;
-        }
-
-        setStatus("Saving changes...");
-
-        // Send all PATCH requests in parallel
-        await Promise.all(
-          updates.map(u =>
-            fetch(`${API_BASE}/employees/${u.emp_code}/status`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                upcoming_status: u.upcoming_status,
-                status_change_date: u.status_change_date
-              })
-            }).then(async res => {
-              if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || "Failed to update status");
-              }
-            })
-          )
-        );
-
-        setStatus("All changes saved successfully.");
-        await loadEmployees();
-      } catch (e) {
-        console.error(e);
-        setStatus(e.message, true);
+    // On page load
+    document.addEventListener("DOMContentLoaded", () => {
+      // Check Today and auto-load if set
+      if (updateTodayRequirement()) {
+        loadStatuses();
       }
     });
 
-    refreshBtn.addEventListener("click", loadEmployees);
-
-    // Initial load
-    loadEmployees();
+    // If Today changes while this page is open (user changes top bar then comes back)
+    window.addEventListener("storage", () => {
+      updateTodayRequirement();
+    });
   </script>
-  <script src="backend/static/today.js"></script>
-  <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const manualToday = getManualToday();
-    const warn = document.getElementById("status-warning");
-    const content = document.getElementById("status-content");
-
-    // If Today is not set, show warning + hide content
-    if (!manualToday) {
-        warn.style.display = "block";
-        content.style.display = "none";
-        return;
-    }
-
-    // If Today is set, show content and load status
-    warn.style.display = "none";
-    content.style.display = "block";
-
-    loadStatuses(manualToday);
-});
-
-// Load employee statuses using the manual Today date
-function loadStatuses(manualToday) {
-    console.log("Loading statuses based on:", manualToday);
-
-    // 👉 IMPORTANT:
-    // We will replace this console.log with your actual logic in Step 3.
-    // For now we just test that Today is coming correctly.
-}
-</script>
 </body>
 </html>
