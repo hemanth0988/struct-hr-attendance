@@ -19,7 +19,7 @@ def refresh_employee_statuses(today: date, db: Session) -> None:
     employees_to_update = (
         db.query(Employee)
         .filter(
-            Employee.status_change_date == today,
+            Employee.status_change_date <= today,
             Employee.upcoming_status.isnot(None),
         )
         .all()
