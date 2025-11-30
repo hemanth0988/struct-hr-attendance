@@ -92,7 +92,6 @@
         <span id="todayInfo" style="font-size:12px;color:#666;"></span>
       </div>
 
-      <!-- This iframe will show your existing pages -->
       <iframe
         id="contentFrame"
         class="content-frame"
@@ -102,32 +101,49 @@
   </div>
 
   <script>
-    // -------- Shared "Today" handling (stored in browser) --------
     const TODAY_KEY = "struct_hr_manual_today_global";
+
     const globalTodayInput = document.getElementById("globalTodayInput");
     const todayInfo = document.getElementById("todayInfo");
 
-    // Load saved date on startup
-    const saved = localStorage.getItem(TODAY_KEY) || "";
-    if (saved) {
-      globalTodayInput.value = saved;
+    // Load saved today
+    const savedToday = localStorage.getItem(TODAY_KEY) || "";
+    if (savedToday) {
+      globalTodayInput.value = savedToday;
       todayInfo.textContent = "(saved)";
     } else {
       todayInfo.textContent = "(please set)";
     }
 
+    // Enforce forward-only Today
     globalTodayInput.addEventListener("change", () => {
-      const val = globalTodayInput.value;
-      if (val) {
-        localStorage.setItem(TODAY_KEY, val);
-        todayInfo.textContent = "(saved)";
-      } else {
-        localStorage.removeItem(TODAY_KEY);
-        todayInfo.textContent = "(please set)";
+      const newVal = globalTodayInput.value;
+      const oldVal = localStorage.getItem(TODAY_KEY);
+
+      if (!newVal) {
+        // Don't allow clearing; restore previous value if any
+        if (oldVal) {
+          globalTodayInput.value = oldVal;
+          todayInfo.textContent = "(saved)";
+        } else {
+          todayInfo.textContent = "(please set)";
+        }
+        return;
       }
+
+      if (oldVal && newVal < oldVal) {
+        // Block going backwards in time
+        globalTodayInput.value = oldVal;
+        todayInfo.textContent = "(cannot go back in time; keeping previous date)";
+        return;
+      }
+
+      // Ok, save new today
+      localStorage.setItem(TODAY_KEY, newVal);
+      todayInfo.textContent = "(saved)";
     });
 
-    // -------- Sidebar navigation (switch pages in iframe) --------
+    // Sidebar navigation
     const frame = document.getElementById("contentFrame");
     const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
 
