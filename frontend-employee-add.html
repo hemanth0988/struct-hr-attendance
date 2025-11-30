@@ -353,7 +353,7 @@
       }
     });
 
-    // -------- Reset DB (also clear Today) --------
+    // -------- Reset DB (also clear Today + reload app) --------
 
     resetDbBtn.addEventListener("click", async () => {
       if (
@@ -379,8 +379,9 @@
         setStatus(data.message || "Database reset successfully.");
         employeesTableBody.innerHTML = "";
 
-        // Clear manual Today so user can choose a new baseline
+        // Clear manual Today and force full app refresh
         localStorage.removeItem(TODAY_KEY);
+        window.top.location.reload();
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
@@ -423,6 +424,7 @@
 
     refreshBtn.addEventListener("click", loadEmployees);
 
+    // Initial load
     loadEmployees();
   </script>
 </body>
