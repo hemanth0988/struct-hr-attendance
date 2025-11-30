@@ -43,8 +43,8 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     else:
         current_status = "Active"
 
-    # Salary calculations
-    basic_monthly = payload.basic_salary_monthly
+    # Salary numbers from payload
+    basic_monthly = payload.basic_pay_monthly
     transport_monthly = payload.transport_monthly
     accommodation_monthly = payload.accommodation_monthly
     other_monthly = payload.other_monthly
@@ -56,28 +56,17 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         + other_monthly
     )
 
-    basic_daily = round(basic_monthly / 30, 2)
-    transport_daily = round(transport_monthly / 30, 2)
-    accommodation_daily = round(accommodation_monthly / 30, 2)
-    other_daily = round(other_monthly / 30, 2)
-
     emp = Employee(
         emp_code=_generate_emp_code(db),
         name=payload.name,
         joining_date=payload.joining_date,
-
         current_status=current_status,
         upcoming_status=None,
         status_change_date=None,
-
-        basic_salary_monthly=basic_monthly,
-        basic_salary_daily=basic_daily,
+        basic_pay_monthly=basic_monthly,
         transport_monthly=transport_monthly,
-        transport_daily=transport_daily,
         accommodation_monthly=accommodation_monthly,
-        accommodation_daily=accommodation_daily,
         other_monthly=other_monthly,
-        other_daily=other_daily,
         paid_leave_daily=payload.paid_leave_daily,
         vacation_pay_daily=payload.vacation_pay_daily,
         total_salary_monthly=total_salary_monthly,
