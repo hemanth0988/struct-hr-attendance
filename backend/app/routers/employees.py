@@ -1,35 +1,76 @@
-from datetime import date
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app import models, schemas
 
-from sqlalchemy import Column, Integer, String, Date, Numeric
-from ..database import Base
+router = APIRouter(
+    prefix="/employees",
+    tags=["employees"]
+)
 
 
-class Employee(Base):
-    __tablename__ = "employees"
+# -------------------------
+# GET ALL EMPLOYEES
+# -------------------------
+@router.get("/")
+def list_employees(db: Session = Depends(get_db)):
+    employees = db.query(models.Employee).all()
+    return employees
 
-    id = Column(Integer, primary_key=True, index=True)
 
-    # Auto-generated code: EMP01, EMP02, ...
-    emp_code = Column(String(20), unique=True, nullable=False, index=True)
+# -------------------------
+# CREATE NEW EMPLOYEE
+# -------------------------
+@router.post("/")
+def create_employee(emp: schemas.EmployeeCreate, db: Session = Depends(get_db)):
 
-    # Basic identity
-    name = Column(String(255), nullable=False)
-    joining_date = Column(Date, nullable=False)
+    # Calculate total salary (sum of all 5 components)
+    total_salary = (
+        emp.basic_salary_monthly +
+        emp.transport_allowance_monthly +
+        emp.food_allowance_monthly +
+        emp.other_allowance_monthly +
+        emp.fixed_allowance_monthly
+    )
 
-    # Status logic
-    current_status = Column(String(20), nullable=False)          # Active, Inactive, Offboarded, Vacation
-    status_change_date = Column(Date, nullable=True)             # When upcoming_status takes effect
-    upcoming_status = Column(String(20), nullable=True)          # Next status (Active/Offboarded/Vacation)
+    new_emp = models.Employee(
+        emp_code=emp.emp_code,
+        name=emp.name,
+        joining_date=emp.joining_date,
+        current_status="Active",  # Default
+        basic_salary_monthly=emp.basic_salary_monthly,
+        transport_allowance_monthly=emp.transport_allowance_monthly,
+        food_allowance_monthly=emp.food_allowance_monthly,
+        other_allowance_monthly=emp.other_allowance_monthly,
+        fixed_allowance_monthly=emp.fixed_allowance_monthly,
+        total_salary_monthly=total_salary,
+        status_change_date=None,
+        upcoming_status=None
+    )
 
-    # Salary components (monthly)
-    basic_pay_monthly = Column(Numeric(10, 2), nullable=False)
-    transport_monthly = Column(Numeric(10, 2), nullable=False)
-    accommodation_monthly = Column(Numeric(10, 2), nullable=False)
-    other_monthly = Column(Numeric(10, 2), nullable=False)
+    db.add(new_emp)
+    db.commit()
+    db.refresh(new_emp)
 
-    # Daily rates
-    paid_leave_daily = Column(Numeric(10, 2), nullable=False)
-    vacation_pay_daily = Column(Numeric(10, 2), nullable=False)
+    return {"message": "Employee created successfully", "employee": new_emp}
 
-    # ⭐ Total monthly – this is the column MySQL was complaining about
-    total_salary_monthly = Column(Numeric(10, 2), nullable=False)
+
+# -------------------------
+# UPDATE EMPLOYEE STATUS (UPCOMING STATUS)
+# -------------------------
+@router.patch("/{emp_code}/status")
+def update_employee_status(emp_code: str, data: schemas.EmployeeStatusUpdate, db: Session = Depends(get_db)):
+
+    emp = db.query(models.Employee).filter(models.Employee.emp_code == emp_code).first()
+
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # User cannot directly modify current status
+    emp.upcoming_status = data.upcoming_status
+    emp.status_change_date = data.status_change_date
+
+    db.commit()
+    db.refresh(emp)
+
+    return {"message": "Status updated", "employee": emp}
