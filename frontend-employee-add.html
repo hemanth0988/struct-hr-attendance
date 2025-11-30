@@ -54,6 +54,13 @@
       margin-left: 10px;
       font-size: 0.9rem;
     }
+    .inline-controls {
+      margin-top: 8px;
+      margin-bottom: 6px;
+    }
+    .inline-controls > * {
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
@@ -113,7 +120,12 @@
 
   <div class="panel">
     <h3>Step 2 – Current Employees (read-only)</h3>
-    <button id="refreshBtn">Refresh List</button>
+
+    <div class="inline-controls">
+      <button id="refreshBtn">Refresh List</button>
+      <button id="resetDbBtn">Reset DB</button>
+    </div>
+
     <table id="employeesTable">
       <thead>
         <tr>
@@ -146,6 +158,8 @@
 
     const addBtn = document.getElementById("addBtn");
     const refreshBtn = document.getElementById("refreshBtn");
+    const resetDbBtn = document.getElementById("resetDbBtn");
+
     const statusSpan = document.getElementById("status");
     const employeesTableBody = document.querySelector("#employeesTable tbody");
 
@@ -156,7 +170,6 @@
 
     // -------- Decimal helpers (for text inputs) --------
 
-    // Only digits + one dot, max 2 decimals
     function cleanMoneyInput(input) {
       let v = input.value;
 
@@ -182,7 +195,6 @@
       input.value = v;
     }
 
-    // On blur, normalise to exactly 2 decimals (if value is valid)
     function normaliseTwoDecimals(input) {
       if (input.value === "") return;
       const n = parseFloat(input.value);
@@ -208,7 +220,6 @@
       inp.addEventListener("input", () => {
         const oldCursor = inp.selectionStart;
         cleanMoneyInput(inp);
-        // try to keep cursor roughly where it was
         inp.selectionStart = inp.selectionEnd = oldCursor;
 
         if (
@@ -333,6 +344,37 @@
         vacationDailyInput.value = "";
 
         await loadEmployees();
+      } catch (e) {
+        console.error(e);
+        setStatus(e.message, true);
+      }
+    });
+
+    // -------- Reset DB (no password, just confirm) --------
+
+    resetDbBtn.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Are you sure you want to delete ALL employees and attendance? This cannot be undone."
+        )
+      ) {
+        return;
+      }
+
+      try {
+        setStatus("Resetting database...");
+        const res = await fetch(`${API_BASE}/admin/reset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Reset failed");
+        }
+        const data = await res.json();
+        setStatus(data.message || "Database reset successfully.");
+        employeesTableBody.innerHTML = "";
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
