@@ -51,6 +51,9 @@
 </head>
 <body>
   <div id="today-bar"></div>
+  <div id="status-warning" style="display:none; color:red; padding:10px;">
+    Please set Today date at the top to view employee statuses.
+</div>
   <h1>Struct HR – Employee Status</h1>
 
   <div class="panel">
@@ -252,5 +255,34 @@
     loadEmployees();
   </script>
   <script src="backend/static/today.js"></script>
+  <script>
+document.addEventListener("DOMContentLoaded", () => {
+    const manualToday = getManualToday();
+    const warn = document.getElementById("status-warning");
+    const content = document.getElementById("status-content");
+
+    // If Today is not set, show warning + hide content
+    if (!manualToday) {
+        warn.style.display = "block";
+        content.style.display = "none";
+        return;
+    }
+
+    // If Today is set, show content and load status
+    warn.style.display = "none";
+    content.style.display = "block";
+
+    loadStatuses(manualToday);
+});
+
+// Load employee statuses using the manual Today date
+function loadStatuses(manualToday) {
+    console.log("Loading statuses based on:", manualToday);
+
+    // 👉 IMPORTANT:
+    // We will replace this console.log with your actual logic in Step 3.
+    // For now we just test that Today is coming correctly.
+}
+</script>
 </body>
 </html>
