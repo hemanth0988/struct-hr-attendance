@@ -2,20 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
-from .models import employee as employee_model
+from .models import employee as employee_model  # ensure models are registered
 from .models import attendance as attendance_model
-from .routers import employees as employees_router
-from .routers import attendance as attendance_router
+from .routers import employees, attendance, admin_reset
 
-# Create all tables
+# Create tables if not exist
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(title="Struct HR Attendance API")
 
-# Allow frontend (any origin for now – simple for testing)
+# CORS – allow everything for now (you’re loading HTML from file://)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # later we can restrict to your domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,6 +26,7 @@ def read_root():
     return {"message": "Struct HR Attendance API running"}
 
 
-# Include routes
-app.include_router(employees_router.router)
-app.include_router(attendance_router.router)
+# API routers
+app.include_router(employees.router)
+app.include_router(attendance.router)
+app.include_router(admin_reset.router)
