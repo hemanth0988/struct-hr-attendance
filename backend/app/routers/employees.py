@@ -1,53 +1,24 @@
 from datetime import date
-from typing import List, Optional, Literal
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..models.employee import Employee
+from ..models.attendance import Attendance
+from ..schemas.employee import (
+    EmployeeCreate,
+    EmployeeUpdate,
+    EmployeeResponse,
+)
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
 
-# ---------- Pydantic Schemas ----------
-
-class EmployeeCreate(BaseModel):
-    name: str
-    joining_date: date
-    basic_pay_monthly: float
-    transport_monthly: float
-    accommodation_monthly: float
-    other_monthly: float
-    paid_leave_daily: float
-    vacation_pay_daily: float
-
-
-class EmployeeResponse(BaseModel):
-    id: int
-    emp_code: str
-    name: str
-    joining_date: date
-    current_status: str
-    status_change_date: Optional[date] = None
-    upcoming_status: Optional[str] = None
-
-    class Config:
-        orm_mode = True
-
-
-class EmployeeStatusUpdate(BaseModel):
-    """
-    Used by the Employee Status page to set an upcoming status
-    and a date when that status should become active.
-    """
-    upcoming_status: Optional[Literal["Active", "Vacation", "Offboarded"]] = None
-    status_change_date: Optional[date] = None
-
-
-# ---------- Dependency ----------
-
+# -------------------------------------------------------------------
+# DB dependency
+# -------------------------------------------------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -56,95 +27,130 @@ def get_db():
         db.close()
 
 
-# ---------- Helpers ----------
-
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
 def generate_emp_code(db: Session) -> str:
     """
-    Simple EMP01, EMP02, ... generator based on current count.
+    Generate next EMP code as EMP01, EMP02, ...
+    based on the last employee in the table.
     """
-    last = db.query(Employee).order_by(Employee.id.desc()).first()
-    if not last or not last.emp_code or not last.emp_code.startswith("EMP"):
-        return "EMP01"
-    try:
-        num = int(last.emp_code.replace("EMP", ""))
-    except ValueError:
-        num = 0
-    return f"EMP{num + 1:02d}"
+    last_emp = db.query(Employee).order_by(Employee.id.desc()).first()
+    if last_emp and last_emp.emp_code and last_emp.emp_code.startswith("EMP"):
+        try:
+            last_num = int(last_emp.emp_code[3:])
+        except ValueError:
+            last_num = 0
+    else:
+        last_num = 0
+
+    return f"EMP{last_num + 1:02d}"
 
 
-# ---------- Routes ----------
+def determine_initial_status(joining_date: date) -> str:
+    """
+    For a brand-new employee:
+    - If joining_date > real today  → Inactive
+    - Else                         → Active
+    """
+    today_real = date.today()
+    return "Inactive" if joining_date > today_real else "Active"
 
+
+# -------------------------------------------------------------------
+# List employees
+# -------------------------------------------------------------------
 @router.get("/", response_model=List[EmployeeResponse])
 def list_employees(db: Session = Depends(get_db)):
-    """
-    Return all employees, including current_status, status_change_date and upcoming_status.
-    This is used by:
-      - Add Employee page (bottom table)
-      - Employee Status page
-    """
     employees = db.query(Employee).order_by(Employee.id.asc()).all()
     return employees
 
 
+# -------------------------------------------------------------------
+# Create employee
+# -------------------------------------------------------------------
 @router.post("/", response_model=EmployeeResponse)
 def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     """
     Create a new employee.
-    current_status is:
-      - 'Inactive' if joining_date is in the future
-      - 'Active' otherwise
+
+    - Auto-generates EMP code (EMP01, EMP02, …)
+    - Sets initial current_status from joining_date
+    - Computes total_salary_monthly (cannot be NULL in DB)
     """
+
     emp_code = generate_emp_code(db)
+    current_status = determine_initial_status(payload.joining_date)
 
-    today = date.today()
-    if payload.joining_date > today:
-        current_status = "Inactive"
-    else:
-        current_status = "Active"
+    # Total monthly salary must never be NULL
+    total_salary_monthly = (
+        (payload.basic_pay_monthly or 0)
+        + (payload.transport_monthly or 0)
+        + (payload.accommodation_monthly or 0)
+        + (payload.other_monthly or 0)
+    )
 
-    emp = Employee(
+    employee = Employee(
         emp_code=emp_code,
         name=payload.name,
         joining_date=payload.joining_date,
         current_status=current_status,
+        status_change_date=None,
+        upcoming_status=None,
         basic_pay_monthly=payload.basic_pay_monthly,
         transport_monthly=payload.transport_monthly,
         accommodation_monthly=payload.accommodation_monthly,
         other_monthly=payload.other_monthly,
         paid_leave_daily=payload.paid_leave_daily,
         vacation_pay_daily=payload.vacation_pay_daily,
-        status_change_date=None,
-        upcoming_status=None,
+        total_salary_monthly=total_salary_monthly,
     )
 
-    db.add(emp)
+    db.add(employee)
     db.commit()
-    db.refresh(emp)
-    return emp
+    db.refresh(employee)
+    return employee
 
 
+# -------------------------------------------------------------------
+# Update upcoming status for an employee
+# -------------------------------------------------------------------
 @router.patch("/{employee_id}/status", response_model=EmployeeResponse)
 def update_employee_status(
     employee_id: int,
-    payload: EmployeeStatusUpdate,
+    payload: EmployeeUpdate,
     db: Session = Depends(get_db),
 ):
     """
-    Set an upcoming status + the date from which it should apply.
-    - User NEVER changes current_status directly.
-    - When attendance uses a "today" date that reaches status_change_date,
-      another piece of logic (in attendance router) will:
-          upcoming_status -> current_status
-          clear upcoming_status + status_change_date
+    Only upcoming_status + status_change_date are user-editable.
+    current_status is always controlled by the system.
     """
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # If both are None, this effectively clears any future change
     emp.upcoming_status = payload.upcoming_status
     emp.status_change_date = payload.status_change_date
 
     db.commit()
     db.refresh(emp)
     return emp
+
+
+# -------------------------------------------------------------------
+# Reset all data (employees + attendance) – for testing only
+# -------------------------------------------------------------------
+@router.post("/reset-all", response_model=dict)
+def reset_all_data(db: Session = Depends(get_db)):
+    """
+    Danger zone: wipe all employees and attendance.
+
+    This is only for your test environment, so we don't
+    do any authentication on purpose (as you requested).
+    """
+
+    db.query(Attendance).delete()
+    db.query(Employee).delete()
+    db.commit()
+
+    return {"message": "All employees and attendance records have been deleted."}
