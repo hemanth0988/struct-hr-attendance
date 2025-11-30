@@ -115,7 +115,7 @@
       todayInfo.textContent = "(please set)";
     }
 
-    // Forward-only Today logic
+    // Forward-only Today + auto-refresh
     globalTodayInput.addEventListener("change", () => {
       const newVal = globalTodayInput.value;
       const oldVal = localStorage.getItem(TODAY_KEY);
@@ -141,6 +141,9 @@
       // Save new Today
       localStorage.setItem(TODAY_KEY, newVal);
       todayInfo.textContent = "(saved)";
+
+      // Auto-refresh entire app so all pages recalc for the new Today
+      window.location.reload();
     });
 
     // Listen for Today changes from iframe pages (DB reset clears Today)
