@@ -20,25 +20,10 @@
       margin-bottom: 16px;
       background: #fafafa;
     }
-    label {
-      display: inline-block;
-      width: 180px;
-      margin-bottom: 6px;
-    }
-    input[type="date"] {
-      padding: 4px 6px;
-      font-size: 14px;
-    }
-    button {
-      padding: 6px 12px;
-      cursor: pointer;
-      margin-right: 8px;
-      margin-top: 4px;
-    }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
+      margin-top: 8px;
       font-size: 14px;
     }
     th, td {
@@ -49,134 +34,191 @@
     th {
       background: #f3f3f3;
     }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+      margin-top: 4px;
+      margin-right: 6px;
+    }
     #status {
       margin-left: 8px;
       font-size: 0.9rem;
     }
-    #todayWarning {
-      color: red;
-      margin-bottom: 10px;
-      font-size: 0.9rem;
+    /* Overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
       display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
     }
-    select {
-      font-size: 13px;
-      padding: 3px 4px;
+    .overlay.visible {
+      display: flex;
+    }
+    .overlay-content {
+      background: #fff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      width: 650px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+    .overlay-content h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <h1>Struct HR – Attendance</h1>
 
-  <div id="todayWarning">
-    Please set <strong>Today</strong> at the top before loading or saving attendance.
-  </div>
-<div class="panel">
-  <h3>Attendance – Month Overview</h3>
-  <div id="monthTodayWarning" style="color:red;font-size:0.9rem;display:none;">
-    Please set <strong>Today</strong> at the top to view the month overview.
-  </div>
-
-  <table id="monthTable">
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- rows will be added by JS -->
-    </tbody>
-  </table>
-</div>
-
   <div class="panel">
-    <h3>Attendance for Today</h3>
-
-    <div>
-      <label for="attendanceDateInput">Attendance date</label>
-      <!-- Locked: user cannot type, only see the copied Today -->
-      <input type="date" id="attendanceDateInput" onkeydown="return false;" readonly />
+    <h3>Attendance – Month Overview</h3>
+    <div id="monthTodayWarning" style="color:red;font-size:0.9rem;display:none;">
+      Please set <strong>Today</strong> at the top to view attendance.
     </div>
-
-    <div style="margin-top: 8px;">
-      <button id="loadBtn">Load Attendance</button>
-      <button id="saveBtn">Save Attendance</button>
-      <span id="status"></span>
-    </div>
-
-    <table id="attendanceTable">
+    <table id="monthTable">
       <thead>
         <tr>
-          <th>Emp Code</th>
-          <th>Name</th>
+          <th>Date</th>
           <th>Status</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
-        <!-- rows will be injected here -->
+        <!-- rows injected by JS -->
       </tbody>
     </table>
+  </div>
+
+  <!-- Attendance overlay -->
+  <div id="attendanceOverlay" class="overlay">
+    <div class="overlay-content">
+      <h3>Mark attendance – <span id="overlayDateLabel"></span></h3>
+      <div class="panel" style="margin-bottom:8px;">
+        <span id="status"></span>
+      </div>
+      <div class="panel">
+        <table id="attendanceTable">
+          <thead>
+            <tr>
+              <th>Emp Code</th>
+              <th>Name</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- attendance rows -->
+          </tbody>
+        </table>
+        <button id="saveBtn">Save Attendance</button>
+        <button id="closeOverlayBtn" type="button">Close</button>
+      </div>
+    </div>
   </div>
 
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
 
-    const attendanceDateInput = document.getElementById("attendanceDateInput");
-    const loadBtn = document.getElementById("loadBtn");
-    const saveBtn = document.getElementById("saveBtn");
-    const tableBody = document.querySelector("#attendanceTable tbody");
+    const monthTableBody = document.querySelector("#monthTable tbody");
+    const monthTodayWarning = document.getElementById("monthTodayWarning");
+
+    const attendanceOverlay = document.getElementById("attendanceOverlay");
+    const overlayDateLabel = document.getElementById("overlayDateLabel");
+    const attendanceTableBody = document.querySelector("#attendanceTable tbody");
     const statusSpan = document.getElementById("status");
-    const todayWarning = document.getElementById("todayWarning");
+    const saveBtn = document.getElementById("saveBtn");
+    const closeOverlayBtn = document.getElementById("closeOverlayBtn");
+
+    let currentOverlayDate = null;
+    let currentStatusCell = null;
+
+    function getToday() {
+      return localStorage.getItem(TODAY_KEY) || "";
+    }
+
+    function pad2(n) {
+      return n < 10 ? "0" + n : "" + n;
+    }
 
     function setStatus(msg, isError = false) {
       statusSpan.textContent = msg || "";
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    function getManualToday() {
-      return localStorage.getItem(TODAY_KEY) || "";
-    }
+    function buildMonthOverview() {
+      const todayStr = getToday();
+      if (!monthTableBody) return;
 
-    function syncTodayUI() {
-      const today = getManualToday();
-      if (!today) {
-        attendanceDateInput.value = "";
-        todayWarning.style.display = "block";
-        loadBtn.disabled = true;
-        saveBtn.disabled = true;
-        tableBody.innerHTML = "";
-        setStatus("Set Today at the top to work with attendance.", true);
-        return false;
-      } else {
-        attendanceDateInput.value = today;
-        todayWarning.style.display = "none";
-        loadBtn.disabled = false;
-        saveBtn.disabled = false;
-        setStatus("");
-        return true;
+      if (!todayStr) {
+        monthTodayWarning.style.display = "block";
+        monthTableBody.innerHTML = "";
+        return;
       }
-    }
+      monthTodayWarning.style.display = "none";
 
-    async function loadAttendance() {
-      setStatus("");
-
-      if (!syncTodayUI()) {
+      const parts = todayStr.split("-");
+      if (parts.length !== 3) {
+        monthTableBody.innerHTML = "";
+        return;
+      }
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const todayDay = parseInt(parts[2], 10);
+      if (isNaN(year) || isNaN(month) || isNaN(todayDay)) {
+        monthTableBody.innerHTML = "";
         return;
       }
 
-      const today = getManualToday();
-      const attendanceDate = attendanceDateInput.value;
+      const daysInMonth = new Date(year, month, 0).getDate();
+      monthTableBody.innerHTML = "";
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const tr = document.createElement("tr");
+        const isoDate = year + "-" + pad2(month) + "-" + pad2(d);
+
+        const tdDate = document.createElement("td");
+        tdDate.textContent = isoDate;
+
+        const tdStatus = document.createElement("td");
+        tdStatus.textContent = "Pending"; // later we'll set Marked/Pending from backend
+
+        const tdAction = document.createElement("td");
+        if (d === todayDay) {
+          const btn = document.createElement("button");
+          btn.textContent = "Mark Attendance";
+          btn.type = "button";
+          btn.addEventListener("click", () => {
+            openAttendanceOverlay(isoDate, tdStatus);
+          });
+          tdAction.appendChild(btn);
+        } else {
+          tdAction.textContent = "-";
+        }
+
+        tr.appendChild(tdDate);
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdAction);
+        monthTableBody.appendChild(tr);
+      }
+    }
+
+    async function loadAttendance(dateISO) {
+      const today = getToday();
+      if (!today) {
+        setStatus("Please set Today at the top first.", true);
+        return;
+      }
 
       try {
         setStatus("Loading...");
-        // NOTE: trailing slash added after /attendance/
-        const url = `${API_BASE}/attendance/?attendance_date=${encodeURIComponent(
-          attendanceDate
-        )}&today=${encodeURIComponent(today)}`;
-
+        const url = API_BASE + "/attendance/?today=" +
+          encodeURIComponent(today) +
+          "&attendance_date=" + encodeURIComponent(dateISO);
         const res = await fetch(url);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -184,13 +226,7 @@
         }
         const data = await res.json();
 
-        tableBody.innerHTML = "";
-
-        if (!Array.isArray(data) || data.length === 0) {
-          setStatus("No active employees found for attendance.", true);
-          return;
-        }
-
+        attendanceTableBody.innerHTML = "";
         data.forEach(row => {
           const tr = document.createElement("tr");
           tr.dataset.employeeId = row.employee_id;
@@ -204,32 +240,33 @@
 
           const tdStatus = document.createElement("td");
           const select = document.createElement("select");
-
-          const STATUS_OPTIONS = [
+          const options = [
             { value: "Present", label: "Present" },
             { value: "PaidLeave", label: "Paid leave" },
             { value: "UnpaidLeave", label: "Unpaid leave" }
           ];
-
-          STATUS_OPTIONS.forEach(optDef => {
-            const opt = document.createElement("option");
-            opt.value = optDef.value;
-            opt.textContent = optDef.label;
-            if (row.status === optDef.value) {
-              opt.selected = true;
+          options.forEach(opt => {
+            const o = document.createElement("option");
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (row.status === opt.value) {
+              o.selected = true;
             }
-            select.appendChild(opt);
+            select.appendChild(o);
           });
-
           tdStatus.appendChild(select);
 
           tr.appendChild(tdCode);
           tr.appendChild(tdName);
           tr.appendChild(tdStatus);
-          tableBody.appendChild(tr);
+          attendanceTableBody.appendChild(tr);
         });
 
-        setStatus(`Loaded attendance for ${data.length} active employee(s).`);
+        if (data.length === 0) {
+          setStatus("No active employees for this date.", true);
+        } else {
+          setStatus("Loaded attendance for " + data.length + " active employee(s)." );
+        }
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
@@ -237,14 +274,9 @@
     }
 
     async function saveAttendance() {
-      setStatus("");
-
-      if (!syncTodayUI()) {
-        return;
-      }
-      const rows = Array.from(tableBody.querySelectorAll("tr"));
+      const rows = Array.from(attendanceTableBody.querySelectorAll("tr"));
       if (rows.length === 0) {
-        setStatus("No rows to save. Load attendance first.", true);
+        setStatus("No rows to save – load attendance first.", true);
         return;
       }
 
@@ -252,143 +284,62 @@
         const employeeId = parseInt(tr.dataset.employeeId, 10);
         const attendanceDate = tr.dataset.attendanceDate;
         const select = tr.querySelector("select");
-        const statusVal = select.value;
         return {
           employee_id: employeeId,
           attendance_date: attendanceDate,
-          status: statusVal
+          status: select.value
         };
       });
 
       try {
-        setStatus("Saving attendance...");
-        // NOTE: trailing slash added here too
-        const res = await fetch(`${API_BASE}/attendance/`, {
+        setStatus("Saving...");
+        const res = await fetch(API_BASE + "/attendance/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items })
+          body: JSON.stringify({ items: items })
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || "Failed to save attendance");
         }
         const result = await res.json();
-        setStatus(`Saved ${result.updated} attendance row(s).`);
+        setStatus("Saved " + result.updated + " attendance rows.");
+        if (currentStatusCell) {
+          currentStatusCell.textContent = "Marked";
+        }
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
       }
     }
 
-    loadBtn.addEventListener("click", loadAttendance);
+    function openAttendanceOverlay(dateISO, statusCell) {
+      currentOverlayDate = dateISO;
+      currentStatusCell = statusCell;
+      overlayDateLabel.textContent = dateISO;
+      attendanceOverlay.classList.add("visible");
+      attendanceTableBody.innerHTML = "";
+      loadAttendance(dateISO);
+    }
+
+    function closeAttendanceOverlay() {
+      attendanceOverlay.classList.remove("visible");
+      currentOverlayDate = null;
+      currentStatusCell = null;
+      setStatus("");
+      attendanceTableBody.innerHTML = "";
+    }
+
     saveBtn.addEventListener("click", saveAttendance);
+    closeOverlayBtn.addEventListener("click", closeAttendanceOverlay);
 
-    document.addEventListener("DOMContentLoaded", () => {
-      syncTodayUI();
-      if (getManualToday()) {
-        loadAttendance();
+    document.addEventListener("DOMContentLoaded", buildMonthOverview);
+
+    window.addEventListener("storage", (ev) => {
+      if (ev.key === TODAY_KEY) {
+        buildMonthOverview();
       }
     });
-
-    window.addEventListener("storage", () => {
-      syncTodayUI();
-    });
-    // ----- Month Overview (new UI) -----
-(function () {
-  function getManualToday() {
-    // Read the same Today we use everywhere else
-    return localStorage.getItem("struct_hr_manual_today_global") || "";
-  }
-
-  function pad2(n) {
-    return n < 10 ? "0" + n : "" + n;
-  }
-
-  function buildMonthOverview() {
-    const todayStr = getManualToday();
-    const warningEl = document.getElementById("monthTodayWarning");
-    const tbody = document.querySelector("#monthTable tbody");
-
-    if (!tbody) {
-      return; // in case HTML not present
-    }
-
-    if (!todayStr) {
-      // No Today set → show warning and clear table
-      if (warningEl) warningEl.style.display = "block";
-      tbody.innerHTML = "";
-      return;
-    }
-
-    if (warningEl) warningEl.style.display = "none";
-
-    const parts = todayStr.split("-");
-    if (parts.length !== 3) {
-      tbody.innerHTML = "";
-      return;
-    }
-
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10); // 1-12
-    const todayDay = parseInt(parts[2], 10);
-
-    if (isNaN(year) || isNaN(month) || isNaN(todayDay)) {
-      tbody.innerHTML = "";
-      return;
-    }
-
-    // Number of days in this month
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    tbody.innerHTML = "";
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const tr = document.createElement("tr");
-
-      // Show date nicely: 2025-12-01
-      const dateStr = `${year}-${pad2(month)}-${pad2(d)}`;
-
-      const tdDate = document.createElement("td");
-      tdDate.textContent = dateStr;
-
-      const tdStatus = document.createElement("td");
-      // For now, everything is Pending. Later we'll wire real Marked/Pending from backend.
-      tdStatus.textContent = "Pending";
-
-      const tdAction = document.createElement("td");
-      if (d === todayDay) {
-        const btn = document.createElement("button");
-        btn.textContent = "Mark Attendance";
-        btn.type = "button";
-        btn.dataset.attDate = dateStr;
-        // For now, just a placeholder – in Step 2 we'll open the overlay.
-        btn.addEventListener("click", () => {
-          // We'll hook this to the overlay logic later
-          console.log("Mark Attendance clicked for", dateStr);
-          alert("In next step, this will open the attendance overlay for " + dateStr);
-        });
-        tdAction.appendChild(btn);
-      } else {
-        tdAction.textContent = "-";
-      }
-
-      tr.appendChild(tdDate);
-      tr.appendChild(tdStatus);
-      tr.appendChild(tdAction);
-      tbody.appendChild(tr);
-    }
-  }
-
-  // Build once when page loads
-  document.addEventListener("DOMContentLoaded", buildMonthOverview);
-
-  // Rebuild when Today changes in another tab/frame
-  window.addEventListener("storage", (ev) => {
-    if (ev.key === "struct_hr_manual_today_global") {
-      buildMonthOverview();
-    }
-  });
-})();
   </script>
 </body>
 </html>
