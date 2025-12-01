@@ -90,7 +90,8 @@
       margin-top: 10px;
     }
     #addStatus,
-    #updateStatusMsg {
+    #updateStatusMsg,
+    #salaryStatus {
       margin-left: 8px;
       font-size: 0.9rem;
     }
@@ -121,6 +122,7 @@
           <th>New Status</th>
           <th>Effective Date</th>
           <th>Update Status</th>
+          <th>View Salary</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -190,6 +192,32 @@
     </div>
   </div>
 
+  <!-- Salary View/Edit Overlay -->
+  <div id="salaryOverlay" class="overlay">
+    <div class="overlay-content">
+      <h3>Salary details – <span id="salaryEmpLabel"></span></h3>
+
+      <h4>Monthly salary components</h4>
+      <div><label>Basic pay (monthly)</label><input type="text" id="salaryBasicMonthlyInput" /></div>
+      <div><label>Transport (monthly)</label><input type="text" id="salaryTransportMonthlyInput" /></div>
+      <div><label>Accommodation (monthly)</label><input type="text" id="salaryAccommodationMonthlyInput" /></div>
+      <div><label>Other (monthly)</label><input type="text" id="salaryOtherMonthlyInput" /></div>
+
+      <div><label>Total salary (monthly)</label><input type="text" id="salaryTotalMonthlyInput" readonly /></div>
+
+      <h4>Leave-related daily amounts</h4>
+      <div><label>Paid leave (daily)</label><input type="text" id="salaryPaidLeaveDailyInput" /></div>
+      <div><label>Vacation pay (daily)</label><input type="text" id="salaryVacationDailyInput" /></div>
+
+      <div class="overlay-actions">
+        <button id="editSalaryBtn" type="button">Edit salary</button>
+        <button id="saveSalaryBtn" type="button" disabled>Save salary</button>
+        <button id="closeSalaryBtn" type="button">Close</button>
+        <span id="salaryStatus"></span>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
@@ -200,6 +228,7 @@
     const statusTableBody = document.querySelector("#statusTable tbody");
     const todayWarning = document.getElementById("todayWarning");
 
+    /* --------- Add Employee Elements --------- */
     const addOverlay = document.getElementById("addEmployeeOverlay");
     const addEmployeeBtn = document.getElementById("addEmployeeBtn");
     const cancelAddBtn = document.getElementById("cancelAddBtn");
@@ -215,6 +244,7 @@
     const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
     const vacationDailyInput = document.getElementById("vacationDailyInput");
 
+    /* --------- Update Status Elements --------- */
     const updateOverlay = document.getElementById("updateStatusOverlay");
     const updateEmpLabel = document.getElementById("updateEmpLabel");
     const updateStatusSelect = document.getElementById("updateStatusSelect");
@@ -222,8 +252,23 @@
     const updateStatusMsg = document.getElementById("updateStatusMsg");
     const saveStatusBtn = document.getElementById("saveStatusBtn");
     const cancelStatusBtn = document.getElementById("cancelStatusBtn");
-
     let currentUpdateEmpCode = null;
+
+    /* --------- Salary View/Edit Elements --------- */
+    const salaryOverlay = document.getElementById("salaryOverlay");
+    const salaryEmpLabel = document.getElementById("salaryEmpLabel");
+    const salaryBasicMonthlyInput = document.getElementById("salaryBasicMonthlyInput");
+    const salaryTransportMonthlyInput = document.getElementById("salaryTransportMonthlyInput");
+    const salaryAccommodationMonthlyInput = document.getElementById("salaryAccommodationMonthlyInput");
+    const salaryOtherMonthlyInput = document.getElementById("salaryOtherMonthlyInput");
+    const salaryTotalMonthlyInput = document.getElementById("salaryTotalMonthlyInput");
+    const salaryPaidLeaveDailyInput = document.getElementById("salaryPaidLeaveDailyInput");
+    const salaryVacationDailyInput = document.getElementById("salaryVacationDailyInput");
+    const editSalaryBtn = document.getElementById("editSalaryBtn");
+    const saveSalaryBtn = document.getElementById("saveSalaryBtn");
+    const closeSalaryBtn = document.getElementById("closeSalaryBtn");
+    const salaryStatus = document.getElementById("salaryStatus");
+    let currentSalaryEmpCode = null;
 
     function setMsg(msg, isError = false) {
       statusMsg.textContent = msg || "";
@@ -251,6 +296,8 @@
       return true;
     }
 
+    /* ------------------ Load Employees & Status ------------------ */
+
     async function loadStatuses() {
       if (!ensureToday()) return;
       const today = getToday();
@@ -273,10 +320,17 @@
             <td>${emp.upcoming_status || "-"}</td>
             <td>${emp.status_change_date || "-"}</td>
             <td><button class="updateStatusBtn">Update Status</button></td>
+            <td><button class="viewSalaryBtn">View Salary</button></td>
           `;
+
           tr.querySelector(".updateStatusBtn").addEventListener("click", () => {
             openUpdateOverlay(emp);
           });
+
+          tr.querySelector(".viewSalaryBtn").addEventListener("click", () => {
+            openSalaryOverlay(emp);
+          });
+
           statusTableBody.appendChild(tr);
         });
 
@@ -289,7 +343,7 @@
 
     reloadBtn.addEventListener("click", loadStatuses);
 
-    /* Add Employee modal logic */
+    /* ------------------ Add Employee Overlay ------------------ */
 
     function openAddOverlay() {
       addStatusSpan.textContent = "";
@@ -315,7 +369,7 @@
     });
     cancelAddBtn.addEventListener("click", closeAddOverlay);
 
-    function cleanMoneyInput(inp) {
+    function cleanMoneyInputAdd(inp) {
       let v = inp.value.replace(/[^\d.]/g, "");
       const dot = v.indexOf(".");
       if (dot !== -1) {
@@ -324,7 +378,7 @@
       inp.value = v;
     }
 
-    function norm(inp) {
+    function normAdd(inp) {
       if (!inp.value) return;
       const n = parseFloat(inp.value);
       inp.value = isNaN(n) ? "" : n.toFixed(2);
@@ -334,17 +388,17 @@
      otherMonthlyInput, paidLeaveDailyInput, vacationDailyInput].forEach(inp => {
       inp.addEventListener("input", () => {
         const pos = inp.selectionStart;
-        cleanMoneyInput(inp);
+        cleanMoneyInputAdd(inp);
         inp.selectionStart = inp.selectionEnd = pos;
-        recalcTotals();
+        recalcAddTotals();
       });
       inp.addEventListener("blur", () => {
-        norm(inp);
-        recalcTotals();
+        normAdd(inp);
+        recalcAddTotals();
       });
     });
 
-    function recalcTotals() {
+    function recalcAddTotals() {
       const bm = parseFloat(basicMonthlyInput.value) || 0;
       const tm = parseFloat(transportMonthlyInput.value) || 0;
       const am = parseFloat(accommodationMonthlyInput.value) || 0;
@@ -400,7 +454,7 @@
       }
     });
 
-    /* Update Status overlay */
+    /* ------------------ Update Status Overlay ------------------ */
 
     function openUpdateOverlay(emp) {
       if (!ensureToday()) return;
@@ -471,6 +525,154 @@
         updateStatusMsg.style.color = "red";
       }
     });
+
+    /* ------------------ Salary View/Edit Overlay ------------------ */
+
+    function setSalaryReadOnly(isReadOnly) {
+      const inputs = [
+        salaryBasicMonthlyInput,
+        salaryTransportMonthlyInput,
+        salaryAccommodationMonthlyInput,
+        salaryOtherMonthlyInput,
+        salaryPaidLeaveDailyInput,
+        salaryVacationDailyInput
+      ];
+      inputs.forEach(inp => {
+        inp.readOnly = isReadOnly;
+        inp.style.background = isReadOnly ? "#f7f7f7" : "#ffffff";
+      });
+      // total is always readonly
+      salaryTotalMonthlyInput.readOnly = true;
+      salaryTotalMonthlyInput.style.background = "#f7f7f7";
+
+      editSalaryBtn.disabled = !isReadOnly;
+      saveSalaryBtn.disabled = isReadOnly;
+    }
+
+    function openSalaryOverlay(emp) {
+      currentSalaryEmpCode = emp.emp_code;
+      salaryEmpLabel.textContent = `${emp.emp_code} – ${emp.name}`;
+      salaryStatus.textContent = "";
+      salaryStatus.style.color = "black";
+
+      // Fill values (if backend doesn't send them, they will just be blank)
+      salaryBasicMonthlyInput.value =
+        emp.basic_pay_monthly != null ? Number(emp.basic_pay_monthly).toFixed(2) : "";
+      salaryTransportMonthlyInput.value =
+        emp.transport_monthly != null ? Number(emp.transport_monthly).toFixed(2) : "";
+      salaryAccommodationMonthlyInput.value =
+        emp.accommodation_monthly != null ? Number(emp.accommodation_monthly).toFixed(2) : "";
+      salaryOtherMonthlyInput.value =
+        emp.other_monthly != null ? Number(emp.other_monthly).toFixed(2) : "";
+      salaryPaidLeaveDailyInput.value =
+        emp.paid_leave_daily != null ? Number(emp.paid_leave_daily).toFixed(2) : "";
+      salaryVacationDailyInput.value =
+        emp.vacation_pay_daily != null ? Number(emp.vacation_pay_daily).toFixed(2) : "";
+
+      recalcSalaryTotals();
+      setSalaryReadOnly(true);
+      salaryOverlay.classList.add("visible");
+    }
+
+    function closeSalaryOverlay() {
+      salaryOverlay.classList.remove("visible");
+      currentSalaryEmpCode = null;
+    }
+
+    closeSalaryBtn.addEventListener("click", closeSalaryOverlay);
+    editSalaryBtn.addEventListener("click", () => {
+      setSalaryReadOnly(false);
+      salaryStatus.textContent = "Editing...";
+      salaryStatus.style.color = "black";
+    });
+
+    function cleanMoneyInputSalary(inp) {
+      let v = inp.value.replace(/[^\d.]/g, "");
+      const dot = v.indexOf(".");
+      if (dot !== -1) {
+        v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+      }
+      inp.value = v;
+    }
+
+    function normSalary(inp) {
+      if (!inp.value) return;
+      const n = parseFloat(inp.value);
+      inp.value = isNaN(n) ? "" : n.toFixed(2);
+    }
+
+    [salaryBasicMonthlyInput, salaryTransportMonthlyInput,
+     salaryAccommodationMonthlyInput, salaryOtherMonthlyInput,
+     salaryPaidLeaveDailyInput, salaryVacationDailyInput].forEach(inp => {
+      inp.addEventListener("input", () => {
+        if (inp.readOnly) return;
+        const pos = inp.selectionStart;
+        cleanMoneyInputSalary(inp);
+        inp.selectionStart = inp.selectionEnd = pos;
+        recalcSalaryTotals();
+      });
+      inp.addEventListener("blur", () => {
+        if (inp.readOnly) return;
+        normSalary(inp);
+        recalcSalaryTotals();
+      });
+    });
+
+    function recalcSalaryTotals() {
+      const bm = parseFloat(salaryBasicMonthlyInput.value) || 0;
+      const tm = parseFloat(salaryTransportMonthlyInput.value) || 0;
+      const am = parseFloat(salaryAccommodationMonthlyInput.value) || 0;
+      const om = parseFloat(salaryOtherMonthlyInput.value) || 0;
+      const total = bm + tm + am + om;
+      if (total > 0) {
+        salaryTotalMonthlyInput.value = total.toFixed(2);
+        // Keep daily fields if user wants to align them manually; we don't auto-overwrite here.
+      } else {
+        salaryTotalMonthlyInput.value = "";
+      }
+    }
+
+    saveSalaryBtn.addEventListener("click", async () => {
+      if (!currentSalaryEmpCode) return;
+
+      try {
+        salaryStatus.textContent = "Saving...";
+        salaryStatus.style.color = "black";
+
+        const payload = {
+          basic_pay_monthly: parseFloat(salaryBasicMonthlyInput.value) || 0,
+          transport_monthly: parseFloat(salaryTransportMonthlyInput.value) || 0,
+          accommodation_monthly: parseFloat(salaryAccommodationMonthlyInput.value) || 0,
+          other_monthly: parseFloat(salaryOtherMonthlyInput.value) || 0,
+          paid_leave_daily: parseFloat(salaryPaidLeaveDailyInput.value) || 0,
+          vacation_pay_daily: parseFloat(salaryVacationDailyInput.value) || 0
+        };
+
+        // This assumes you have a PATCH /employees/{emp_code} endpoint
+        const res = await fetch(
+          `${API_BASE}/employees/${encodeURIComponent(currentSalaryEmpCode)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }
+        );
+
+        if (!res.ok) throw new Error("Failed to save salary");
+
+        salaryStatus.textContent = "Salary updated.";
+        salaryStatus.style.color = "green";
+        setSalaryReadOnly(true);
+        await loadStatuses();
+        setTimeout(closeSalaryOverlay, 400);
+      } catch (e) {
+        console.error(e);
+        salaryStatus.textContent = e.message;
+        salaryStatus.style.color = "red";
+      }
+    });
+
+    /* ------------------ Init ------------------ */
 
     document.addEventListener("DOMContentLoaded", () => {
       if (ensureToday()) loadStatuses();
