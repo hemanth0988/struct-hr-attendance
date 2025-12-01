@@ -153,7 +153,8 @@
 
       try {
         setStatus("Loading...");
-        const url = `${API_BASE}/attendance?attendance_date=${encodeURIComponent(
+        // NOTE: trailing slash added after /attendance/
+        const url = `${API_BASE}/attendance/?attendance_date=${encodeURIComponent(
           attendanceDate
         )}&today=${encodeURIComponent(today)}`;
 
@@ -212,7 +213,6 @@
         setStatus(`Loaded attendance for ${data.length} active employee(s).`);
       } catch (e) {
         console.error(e);
-        // Network / CORS / unreachable → e.message is usually "Failed to fetch"
         setStatus(e.message, true);
       }
     }
@@ -243,7 +243,8 @@
 
       try {
         setStatus("Saving attendance...");
-        const res = await fetch(`${API_BASE}/attendance`, {
+        // NOTE: trailing slash added here too
+        const res = await fetch(`${API_BASE}/attendance/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items })
