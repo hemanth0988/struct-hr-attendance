@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 1000px;
+      max-width: 1100px;
       margin: 20px auto;
       padding: 0 10px;
     }
@@ -30,6 +30,7 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
+      font-size: 14px;
     }
     th, td {
       border: 1px solid #ddd;
@@ -49,19 +50,24 @@
       font-size: 0.9rem;
       display: none;
     }
+    select, input[type="date"] {
+      font-size: 13px;
+      padding: 3px 4px;
+    }
   </style>
 </head>
 <body>
   <h1>Struct HR – Employee Status</h1>
 
   <div id="todayWarning">
-    Please set <strong>Today</strong> at the top before viewing employee status.
+    Please set <strong>Today</strong> at the top before viewing or changing employee status.
   </div>
 
   <div class="panel">
-    <h3>Current Employee Status (read-only)</h3>
+    <h3>Current & New Status</h3>
     <div>
       <button id="reloadBtn">Reload Status</button>
+      <button id="saveChangesBtn">Save New Status Changes</button>
       <span id="statusMsg"></span>
     </div>
 
@@ -72,6 +78,8 @@
           <th>Name</th>
           <th>Joining Date</th>
           <th>Current Status</th>
+          <th>New Status</th>
+          <th>Effective Date</th>
         </tr>
       </thead>
       <tbody>
@@ -85,6 +93,7 @@
     const TODAY_KEY = "struct_hr_manual_today_global";
 
     const reloadBtn = document.getElementById("reloadBtn");
+    const saveChangesBtn = document.getElementById("saveChangesBtn");
     const statusMsg = document.getElementById("statusMsg");
     const statusTableBody = document.querySelector("#statusTable tbody");
     const todayWarning = document.getElementById("todayWarning");
@@ -103,12 +112,14 @@
       if (!today) {
         todayWarning.style.display = "block";
         reloadBtn.disabled = true;
+        saveChangesBtn.disabled = true;
         statusTableBody.innerHTML = "";
-        setMsg("Set Today at the top to load employee statuses.", true);
+        setMsg("Set Today at the top to load and change employee statuses.", true);
         return false;
       } else {
         todayWarning.style.display = "none";
         reloadBtn.disabled = false;
+        saveChangesBtn.disabled = false;
         setMsg("");
         return true;
       }
@@ -125,7 +136,6 @@
 
       try {
         setMsg("Loading...");
-        // Pass Today as a query parameter – backend can start using this later
         const res = await fetch(`${API_BASE}/employees/?today=${encodeURIComponent(today)}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -142,6 +152,7 @@
 
         data.forEach(emp => {
           const tr = document.createElement("tr");
+          tr.dataset.empCode = emp.emp_code;
 
           const tdCode = document.createElement("td");
           tdCode.textContent = emp.emp_code;
@@ -152,13 +163,31 @@
           const tdJoin = document.createElement("td");
           tdJoin.textContent = emp.joining_date;
 
-          const tdStatus = document.createElement("td");
-          tdStatus.textContent = emp.current_status;
+          const tdCurrent = document.createElement("td");
+          tdCurrent.textContent = emp.current_status;
+
+          const tdNew = document.createElement("td");
+          const select = document.createElement("select");
+          const opts = ["-", "Active", "On Vacation", "Offboarded"];
+          opts.forEach(label => {
+            const opt = document.createElement("option");
+            opt.textContent = label;
+            opt.value = label === "-" ? "" : label;
+            select.appendChild(opt);
+          });
+          tdNew.appendChild(select);
+
+          const tdDate = document.createElement("td");
+          const dateInput = document.createElement("input");
+          dateInput.type = "date";
+          tdDate.appendChild(dateInput);
 
           tr.appendChild(tdCode);
           tr.appendChild(tdName);
           tr.appendChild(tdJoin);
-          tr.appendChild(tdStatus);
+          tr.appendChild(tdCurrent);
+          tr.appendChild(tdNew);
+          tr.appendChild(tdDate);
           statusTableBody.appendChild(tr);
         });
 
@@ -169,18 +198,101 @@
       }
     }
 
-    // Button click
     reloadBtn.addEventListener("click", loadStatuses);
 
-    // On page load
+    // Save New Status changes (front-end validation + payload preparation)
+    saveChangesBtn.addEventListener("click", async () => {
+      setMsg("");
+
+      if (!updateTodayRequirement()) {
+        return;
+      }
+      const today = getManualToday();
+
+      const rows = Array.from(statusTableBody.querySelectorAll("tr"));
+      if (rows.length === 0) {
+        setMsg("No employees loaded. Reload status first.", true);
+        return;
+      }
+
+      const changes = [];
+      for (const tr of rows) {
+        const empCode = tr.dataset.empCode;
+        const select = tr.querySelector("select");
+        const dateInput = tr.querySelector('input[type="date"]');
+
+        const newStatus = select.value; // "" or "Active" / "On Vacation" / "Offboarded"
+        const effectiveDate = dateInput.value; // "" or YYYY-MM-DD
+
+        // If both empty -> no change for this employee
+        if (!newStatus && !effectiveDate) {
+          continue;
+        }
+
+        // If one is set but not the other -> error
+        if ((newStatus && !effectiveDate) || (!newStatus && effectiveDate)) {
+          setMsg(
+            `Employee ${empCode}: both New Status and Effective Date are required if you set either.`,
+            true
+          );
+          return;
+        }
+
+        // Effective date must be >= Today
+        if (effectiveDate < today) {
+          setMsg(
+            `Employee ${empCode}: Effective Date cannot be earlier than Today (${today}).`,
+            true
+          );
+          return;
+        }
+
+        changes.push({
+          emp_code: empCode,
+          new_status: newStatus,
+          effective_date: effectiveDate
+        });
+      }
+
+      if (changes.length === 0) {
+        setMsg("No changes to save.", true);
+        return;
+      }
+
+      // For now, we only prepare payload and log it.
+      // Backend dev can wire this to a real endpoint later.
+      console.log("Prepared status changes:", changes);
+      setMsg(`Prepared ${changes.length} status change(s). (See console / hand over to backend dev.)`, false);
+
+      // Example of what a real call might look like (left commented for now):
+      /*
+      try {
+        setMsg("Saving changes...");
+        const res = await fetch(`${API_BASE}/employees/status-changes/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ today, changes })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to save status changes");
+        }
+        const result = await res.json();
+        setMsg(result.message || "Status changes saved.");
+        loadStatuses();
+      } catch (e) {
+        console.error(e);
+        setMsg(e.message, true);
+      }
+      */
+    });
+
     document.addEventListener("DOMContentLoaded", () => {
-      // Check Today and auto-load if set
       if (updateTodayRequirement()) {
         loadStatuses();
       }
     });
 
-    // If Today changes while this page is open (user changes top bar then comes back)
     window.addEventListener("storage", () => {
       updateTodayRequirement();
     });
