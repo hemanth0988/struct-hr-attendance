@@ -169,27 +169,19 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // -------- Decimal helpers (for text inputs) --------
-
     function cleanMoneyInput(input) {
       let v = input.value;
-
-      v = v.replace(/[^\d.]/g, "");
-
+      v = v.replace(/[^\\d.]/g, "");
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
         const before = v.slice(0, firstDot + 1);
         let after = v.slice(firstDot + 1);
-
-        after = after.replace(/\./g, "");
-
+        after = after.replace(/\\./g, "");
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
-
         v = before + after;
       }
-
       input.value = v;
     }
 
@@ -214,12 +206,10 @@
 
     moneyInputs.forEach(inp => {
       inp.value = "";
-
       inp.addEventListener("input", () => {
         const oldCursor = inp.selectionStart;
         cleanMoneyInput(inp);
         inp.selectionStart = inp.selectionEnd = oldCursor;
-
         if (
           inp === basicMonthlyInput ||
           inp === transportMonthlyInput ||
@@ -229,7 +219,6 @@
           recalcTotals();
         }
       });
-
       inp.addEventListener("blur", () => {
         normaliseTwoDecimals(inp);
         if (
@@ -253,9 +242,7 @@
       const tm = valueOrZero(transportMonthlyInput);
       const am = valueOrZero(accommodationMonthlyInput);
       const om = valueOrZero(otherMonthlyInput);
-
       const total = bm + tm + am + om;
-
       if (total > 0) {
         totalMonthlyInput.value = total.toFixed(2);
         const daily = (total / 30).toFixed(2);
@@ -269,7 +256,6 @@
     }
 
     // -------- Add Employee (Today required) --------
-
     addBtn.addEventListener("click", async () => {
       setStatus("");
 
@@ -306,7 +292,6 @@
       const transportMonthly = valueOrZero(transportMonthlyInput);
       const accommodationMonthly = valueOrZero(accommodationMonthlyInput);
       const otherMonthly = valueOrZero(otherMonthlyInput);
-
       const paidLeaveDaily = valueOrZero(paidLeaveDailyInput);
       const vacationDaily = valueOrZero(vacationDailyInput);
 
@@ -323,7 +308,14 @@
 
       try {
         setStatus("Saving...");
-        const res = await fetch(`${API_BASE}/employees/`, {
+
+        // Send manual Today to backend so it can decide Active/Inactive correctly
+        let url = `${API_BASE}/employees/`;
+        if (manualToday) {
+          url += `?today=${encodeURIComponent(manualToday)}`;
+        }
+
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -354,16 +346,10 @@
     });
 
     // -------- Reset DB (also clear Today + reload app) --------
-
     resetDbBtn.addEventListener("click", async () => {
-      if (
-        !confirm(
-          "Are you sure you want to delete ALL employees and attendance? This cannot be undone."
-        )
-      ) {
+      if (!confirm("Are you sure you want to delete ALL employees and attendance? This cannot be undone.")) {
         return;
       }
-
       try {
         setStatus("Resetting database...");
         const res = await fetch(`${API_BASE}/admin/reset`, {
@@ -378,8 +364,6 @@
         const data = await res.json();
         setStatus(data.message || "Database reset successfully.");
         employeesTableBody.innerHTML = "";
-
-        // Clear manual Today and force full app refresh
         localStorage.removeItem(TODAY_KEY);
         window.top.location.reload();
       } catch (e) {
@@ -389,7 +373,6 @@
     });
 
     // -------- List Employees (bottom table) --------
-
     async function loadEmployees() {
       try {
         const res = await fetch(`${API_BASE}/employees/`);
@@ -398,7 +381,6 @@
           throw new Error(err.detail || "Failed to fetch employees");
         }
         const data = await res.json();
-
         employeesTableBody.innerHTML = "";
         data.forEach(emp => {
           const tr = document.createElement("tr");
@@ -423,8 +405,6 @@
     }
 
     refreshBtn.addEventListener("click", loadEmployees);
-
-    // Initial load
     loadEmployees();
   </script>
 </body>
