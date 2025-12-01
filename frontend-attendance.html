@@ -22,16 +22,24 @@
     }
     label {
       display: inline-block;
-      width: 150px;
+      width: 180px;
       margin-bottom: 6px;
     }
     input[type="date"] {
       padding: 4px 6px;
+      font-size: 14px;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-top: 4px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
+      font-size: 14px;
     }
     th, td {
       border: 1px solid #ddd;
@@ -42,30 +50,47 @@
       background: #f3f3f3;
     }
     #status {
-      margin-left: 10px;
+      margin-left: 8px;
       font-size: 0.9rem;
+    }
+    #todayWarning {
+      color: red;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    select {
+      font-size: 13px;
+      padding: 3px 4px;
     }
   </style>
 </head>
 <body>
   <h1>Struct HR – Attendance</h1>
 
-  <div class="panel">
-    <h3>Step 1 – Select Today & Load Attendance</h3>
-
-    <div>
-      <label for="attendanceDateInput">Attendance date</label>
-      <input type="date" id="attendanceDateInput" readonly />
-      <button id="loadBtn">Load Attendance</button>
-      <span id="status"></span>
-    </div>
-    <div style="margin-top:6px;font-size:12px;color:#666;">
-      Attendance date always follows the top Today value.
-    </div>
+  <div id="todayWarning">
+    Please set <strong>Today</strong> at the top before loading or saving attendance.
   </div>
 
   <div class="panel">
-    <h3>Step 2 – Mark Attendance</h3>
+    <h3>Attendance for Today</h3>
+
+    <div>
+      <label>Today (from top bar)</label>
+      <span id="todayDisplay" style="font-weight:bold;">(not set)</span>
+    </div>
+
+    <div>
+      <label for="attendanceDateInput">Attendance date</label>
+      <!-- Locked: user cannot type, only see the copied Today -->
+      <input type="date" id="attendanceDateInput" onkeydown="return false;" readonly />
+    </div>
+
+    <div style="margin-top: 8px;">
+      <button id="loadBtn">Load Attendance</button>
+      <button id="saveBtn">Save Attendance</button>
+      <span id="status"></span>
+    </div>
 
     <table id="attendanceTable">
       <thead>
@@ -79,41 +104,67 @@
         <!-- rows will be injected here -->
       </tbody>
     </table>
-    <button id="saveBtn" style="margin-top: 10px;">Save Attendance</button>
   </div>
 
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
 
+    const todayDisplay = document.getElementById("todayDisplay");
     const attendanceDateInput = document.getElementById("attendanceDateInput");
     const loadBtn = document.getElementById("loadBtn");
     const saveBtn = document.getElementById("saveBtn");
     const tableBody = document.querySelector("#attendanceTable tbody");
     const statusSpan = document.getElementById("status");
+    const todayWarning = document.getElementById("todayWarning");
 
     function setStatus(msg, isError = false) {
       statusSpan.textContent = msg || "";
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // Load button click – Today is mandatory; Attendance date = Today only
-    loadBtn.addEventListener("click", async () => {
+    function getManualToday() {
+      return localStorage.getItem(TODAY_KEY) || "";
+    }
+
+    function syncTodayUI() {
+      const today = getManualToday();
+      if (!today) {
+        todayDisplay.textContent = "(not set)";
+        attendanceDateInput.value = "";
+        todayWarning.style.display = "block";
+        loadBtn.disabled = true;
+        saveBtn.disabled = true;
+        tableBody.innerHTML = "";
+        setStatus("Set Today at the top to work with attendance.", true);
+        return false;
+      } else {
+        todayDisplay.textContent = today;
+        attendanceDateInput.value = today;
+        todayWarning.style.display = "none";
+        loadBtn.disabled = false;
+        saveBtn.disabled = false;
+        setStatus("");
+        return true;
+      }
+    }
+
+    async function loadAttendance() {
       setStatus("");
 
-      const today = localStorage.getItem(TODAY_KEY) || "";
-      if (!today) {
-        setStatus("Please set Today at the top before loading attendance.", true);
+      if (!syncTodayUI()) {
         return;
       }
 
-      // Lock attendance date to Today
-      attendanceDateInput.value = today;
-      const attendanceDate = today;
+      const today = getManualToday();
+      const attendanceDate = attendanceDateInput.value;
 
       try {
         setStatus("Loading...");
-        const url = `${API_BASE}/attendance/?today=${today}&attendance_date=${attendanceDate}`;
+        const url = `${API_BASE}/attendance?attendance_date=${encodeURIComponent(
+          attendanceDate
+        )}&today=${encodeURIComponent(today)}`;
+
         const res = await fetch(url);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -124,7 +175,7 @@
         tableBody.innerHTML = "";
 
         if (!Array.isArray(data) || data.length === 0) {
-          setStatus("No employees found for attendance.", true);
+          setStatus("No active employees found for attendance.", true);
           return;
         }
 
@@ -141,15 +192,23 @@
 
           const tdStatus = document.createElement("td");
           const select = document.createElement("select");
-          ["Present", "PaidLeave", "UnpaidLeave"].forEach(optVal => {
+
+          const STATUS_OPTIONS = [
+            { value: "Present", label: "Present" },
+            { value: "PaidLeave", label: "Paid leave" },
+            { value: "UnpaidLeave", label: "Unpaid leave" }
+          ];
+
+          STATUS_OPTIONS.forEach(optDef => {
             const opt = document.createElement("option");
-            opt.value = optVal;
-            opt.textContent = optVal;
-            if (row.status === optVal) {
+            opt.value = optDef.value;
+            opt.textContent = optDef.label;
+            if (row.status === optDef.value) {
               opt.selected = true;
             }
             select.appendChild(opt);
           });
+
           tdStatus.appendChild(select);
 
           tr.appendChild(tdCode);
@@ -158,37 +217,40 @@
           tableBody.appendChild(tr);
         });
 
-        setStatus(`Loaded ${data.length} attendance rows.`);
+        setStatus(`Loaded attendance for ${data.length} active employee(s).`);
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
       }
-    });
+    }
 
-    // Save button – sends all rows back
-    saveBtn.addEventListener("click", async () => {
+    async function saveAttendance() {
       setStatus("");
 
+      if (!syncTodayUI()) {
+        return;
+      }
       const rows = Array.from(tableBody.querySelectorAll("tr"));
       if (rows.length === 0) {
-        setStatus("No rows to save – load attendance first.", true);
+        setStatus("No rows to save. Load attendance first.", true);
         return;
       }
 
       const items = rows.map(tr => {
         const employeeId = parseInt(tr.dataset.employeeId, 10);
         const attendanceDate = tr.dataset.attendanceDate;
-        const statusSelect = tr.querySelector("select");
+        const select = tr.querySelector("select");
+        const statusVal = select.value;
         return {
           employee_id: employeeId,
           attendance_date: attendanceDate,
-          status: statusSelect.value
+          status: statusVal
         };
       });
 
       try {
-        setStatus("Saving...");
-        const res = await fetch(`${API_BASE}/attendance/`, {
+        setStatus("Saving attendance...");
+        const res = await fetch(`${API_BASE}/attendance`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ items })
@@ -198,13 +260,26 @@
           throw new Error(err.detail || "Failed to save attendance");
         }
         const result = await res.json();
-
-        tableBody.innerHTML = "";
-        setStatus(`Saved ${result.updated} attendance rows. Table cleared – load again if needed.`);
+        setStatus(`Saved ${result.updated} attendance row(s).`);
+        // We do NOT clear the table – user keeps seeing current values
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
       }
+    }
+
+    loadBtn.addEventListener("click", loadAttendance);
+    saveBtn.addEventListener("click", saveAttendance);
+
+    document.addEventListener("DOMContentLoaded", () => {
+      syncTodayUI();
+      if (getManualToday()) {
+        loadAttendance();
+      }
+    });
+
+    window.addEventListener("storage", () => {
+      syncTodayUI();
     });
   </script>
 </body>
