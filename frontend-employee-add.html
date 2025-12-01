@@ -51,8 +51,6 @@
       font-size: 13px;
       padding: 3px 4px;
     }
-
-    /* Overlay styles */
     .overlay {
       position: fixed;
       inset: 0;
@@ -109,7 +107,6 @@
 
     <div>
       <button id="reloadBtn">Refresh list</button>
-      <button id="resetDbBtn">Reset DB</button>
       <button id="openAddOverlayBtn">Add new employee</button>
       <span id="statusMsg"></span>
     </div>
@@ -126,8 +123,7 @@
           <th>Update Status</th>
         </tr>
       </thead>
-      <tbody>
-      </tbody>
+      <tbody></tbody>
     </table>
   </div>
 
@@ -137,12 +133,12 @@
       <h3>Add new employee</h3>
 
       <div>
-        <label for="nameInput">Name *</label>
+        <label>Name *</label>
         <input type="text" id="nameInput" />
       </div>
 
       <div>
-        <label for="joiningDateInput">Joining date *</label>
+        <label>Joining date *</label>
         <input type="date" id="joiningDateInput" />
       </div>
 
@@ -199,18 +195,16 @@
     const TODAY_KEY = "struct_hr_manual_today_global";
 
     const reloadBtn = document.getElementById("reloadBtn");
-    const resetDbBtn = document.getElementById("resetDbBtn");
     const openAddOverlayBtn = document.getElementById("openAddOverlayBtn");
-
     const statusMsg = document.getElementById("statusMsg");
     const statusTableBody = document.querySelector("#statusTable tbody");
     const todayWarning = document.getElementById("todayWarning");
 
-    /* ---------- Add Employee Elements ---------- */
     const addOverlay = document.getElementById("addEmployeeOverlay");
     const addEmployeeBtn = document.getElementById("addEmployeeBtn");
     const cancelAddBtn = document.getElementById("cancelAddBtn");
     const addStatusSpan = document.getElementById("addStatus");
+
     const nameInput = document.getElementById("nameInput");
     const joiningDateInput = document.getElementById("joiningDateInput");
     const basicMonthlyInput = document.getElementById("basicMonthlyInput");
@@ -221,7 +215,6 @@
     const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
     const vacationDailyInput = document.getElementById("vacationDailyInput");
 
-    /* ---------- Update Status Overlay Elements ---------- */
     const updateOverlay = document.getElementById("updateStatusOverlay");
     const updateEmpLabel = document.getElementById("updateEmpLabel");
     const updateStatusSelect = document.getElementById("updateStatusSelect");
@@ -233,22 +226,24 @@
     let currentUpdateEmpCode = null;
 
     function setMsg(msg, isError = false) {
-      statusMsg.textContent = msg;
+      statusMsg.textContent = msg || "";
       statusMsg.style.color = isError ? "red" : "green";
     }
 
-    function updateTodayRequirement() {
-      const today = localStorage.getItem(TODAY_KEY);
+    function getToday() {
+      return localStorage.getItem(TODAY_KEY) || "";
+    }
+
+    function ensureToday() {
+      const today = getToday();
       if (!today) {
         todayWarning.style.display = "block";
         reloadBtn.disabled = true;
-        resetDbBtn.disabled = false;
         openAddOverlayBtn.disabled = true;
         statusTableBody.innerHTML = "";
         setMsg("Set Today at the top to work with employees.", true);
         return false;
       }
-
       todayWarning.style.display = "none";
       reloadBtn.disabled = false;
       openAddOverlayBtn.disabled = false;
@@ -256,23 +251,20 @@
       return true;
     }
 
-    /* ------------------ Load Employees ------------------ */
-
     async function loadStatuses() {
-      if (!updateTodayRequirement()) return;
+      if (!ensureToday()) return;
+      const today = getToday();
 
-      const today = localStorage.getItem(TODAY_KEY);
       try {
         setMsg("Loading...");
-        const res = await fetch(`${API_BASE}/employees/?today=${today}`);
-        if (!res.ok) throw new Error("Failed to load employees");
+        const res = await fetch(`${API_BASE}/employees/?today=${encodeURIComponent(today)}`);
+        if (!res.ok) throw new Error("Failed to fetch employees");
 
         const data = await res.json();
         statusTableBody.innerHTML = "";
 
         data.forEach(emp => {
           const tr = document.createElement("tr");
-
           tr.innerHTML = `
             <td>${emp.emp_code}</td>
             <td>${emp.name}</td>
@@ -282,11 +274,9 @@
             <td>${emp.status_change_date || "-"}</td>
             <td><button class="updateStatusBtn">Update Status</button></td>
           `;
-
           tr.querySelector(".updateStatusBtn").addEventListener("click", () => {
             openUpdateOverlay(emp);
           });
-
           statusTableBody.appendChild(tr);
         });
 
@@ -299,30 +289,7 @@
 
     reloadBtn.addEventListener("click", loadStatuses);
 
-    /* ------------------ Reset DB ------------------ */
-
-    resetDbBtn.addEventListener("click", async () => {
-      if (!confirm("Are you sure you want to reset all data?")) return;
-
-      try {
-        setMsg("Resetting...");
-        const res = await fetch(`${API_BASE}/admin/reset`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-
-        if (!res.ok) throw new Error("Reset failed");
-
-        setMsg("Database reset.");
-        localStorage.removeItem(TODAY_KEY);
-        window.top.location.reload();
-      } catch (e) {
-        console.error(e);
-        setMsg(e.message, true);
-      }
-    });
-
-    /* ------------------ Add Employee Overlay ------------------ */
+    /* Add Employee modal logic */
 
     function openAddOverlay() {
       addStatusSpan.textContent = "";
@@ -342,15 +309,17 @@
       addOverlay.classList.remove("visible");
     }
 
-    openAddOverlayBtn.addEventListener("click", openAddOverlay);
+    openAddOverlayBtn.addEventListener("click", () => {
+      if (!ensureToday()) return;
+      openAddOverlay();
+    });
     cancelAddBtn.addEventListener("click", closeAddOverlay);
 
-    /* Money input cleaning + totals */
     function cleanMoneyInput(inp) {
       let v = inp.value.replace(/[^\d.]/g, "");
       const dot = v.indexOf(".");
       if (dot !== -1) {
-        v = v.substring(0, dot + 1) + v.substring(dot + 1).replace(/\./g, "").slice(0, 2);
+        v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, "").slice(0, 2);
       }
       inp.value = v;
     }
@@ -361,8 +330,8 @@
       inp.value = isNaN(n) ? "" : n.toFixed(2);
     }
 
-    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput, otherMonthlyInput,
-     paidLeaveDailyInput, vacationDailyInput].forEach(inp => {
+    [basicMonthlyInput, transportMonthlyInput, accommodationMonthlyInput,
+     otherMonthlyInput, paidLeaveDailyInput, vacationDailyInput].forEach(inp => {
       inp.addEventListener("input", () => {
         const pos = inp.selectionStart;
         cleanMoneyInput(inp);
@@ -381,7 +350,6 @@
       const am = parseFloat(accommodationMonthlyInput.value) || 0;
       const om = parseFloat(otherMonthlyInput.value) || 0;
       const total = bm + tm + am + om;
-
       if (total > 0) {
         totalMonthlyInput.value = total.toFixed(2);
         const daily = (total / 30).toFixed(2);
@@ -391,7 +359,7 @@
     }
 
     addEmployeeBtn.addEventListener("click", async () => {
-      const today = localStorage.getItem(TODAY_KEY);
+      const today = getToday();
       if (!today) {
         addStatusSpan.textContent = "Please set Today first.";
         addStatusSpan.style.color = "red";
@@ -400,6 +368,7 @@
 
       try {
         addStatusSpan.textContent = "Saving...";
+        addStatusSpan.style.color = "black";
 
         const payload = {
           name: nameInput.value.trim(),
@@ -412,29 +381,29 @@
           vacation_pay_daily: parseFloat(vacationDailyInput.value) || 0
         };
 
-        const res = await fetch(`${API_BASE}/employees/?today=${today}`, {
+        const res = await fetch(`${API_BASE}/employees/?today=${encodeURIComponent(today)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
+        if (!res.ok) throw new Error("Failed to create employee");
 
-        if (!res.ok) throw new Error("Failed to add employee");
-
+        addStatusSpan.textContent = "Employee created.";
         addStatusSpan.style.color = "green";
-        addStatusSpan.textContent = "Employee saved.";
 
         await loadStatuses();
-        setTimeout(closeAddOverlay, 500);
+        setTimeout(closeAddOverlay, 400);
       } catch (e) {
         console.error(e);
-        addStatusSpan.style.color = "red";
         addStatusSpan.textContent = e.message;
+        addStatusSpan.style.color = "red";
       }
     });
 
-    /* ------------------ Update Status Overlay ------------------ */
+    /* Update Status overlay */
 
     function openUpdateOverlay(emp) {
+      if (!ensureToday()) return;
       currentUpdateEmpCode = emp.emp_code;
       updateEmpLabel.textContent = `${emp.emp_code} – ${emp.name}`;
       updateStatusSelect.value = emp.upcoming_status || "";
@@ -450,7 +419,7 @@
     cancelStatusBtn.addEventListener("click", closeUpdateOverlay);
 
     saveStatusBtn.addEventListener("click", async () => {
-      const today = localStorage.getItem(TODAY_KEY);
+      const today = getToday();
       if (!today) {
         updateStatusMsg.textContent = "Please set Today first.";
         updateStatusMsg.style.color = "red";
@@ -461,13 +430,13 @@
       const eff = updateEffectiveDateInput.value;
 
       if (!newStatus || !eff) {
-        updateStatusMsg.textContent = "Both fields required.";
+        updateStatusMsg.textContent = "Both fields are required.";
         updateStatusMsg.style.color = "red";
         return;
       }
-
       if (eff < today) {
-        updateStatusMsg.textContent = `Effective Date cannot be earlier than Today (${today}).`;
+        updateStatusMsg.textContent =
+          `Effective Date cannot be earlier than Today (${today}).`;
         updateStatusMsg.style.color = "red";
         return;
       }
@@ -485,16 +454,17 @@
 
       try {
         updateStatusMsg.textContent = "Saving...";
+        updateStatusMsg.style.color = "black";
+
         const res = await fetch(`${API_BASE}/employees/status-changes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body)
         });
-
-        if (!res.ok) throw new Error("Failed to save");
+        if (!res.ok) throw new Error("Failed to save status change");
 
         await loadStatuses();
-        setTimeout(closeUpdateOverlay, 500);
+        setTimeout(closeUpdateOverlay, 400);
       } catch (e) {
         console.error(e);
         updateStatusMsg.textContent = e.message;
@@ -502,14 +472,11 @@
       }
     });
 
-    /* ------------------ Init ------------------ */
-
     document.addEventListener("DOMContentLoaded", () => {
-      if (updateTodayRequirement()) loadStatuses();
+      if (ensureToday()) loadStatuses();
     });
 
-    window.addEventListener("storage", updateTodayRequirement);
+    window.addEventListener("storage", ensureToday);
   </script>
-
 </body>
 </html>
