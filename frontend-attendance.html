@@ -76,11 +76,6 @@
     <h3>Attendance for Today</h3>
 
     <div>
-      <label>Today (from top bar)</label>
-      <span id="todayDisplay" style="font-weight:bold;">(not set)</span>
-    </div>
-
-    <div>
       <label for="attendanceDateInput">Attendance date</label>
       <!-- Locked: user cannot type, only see the copied Today -->
       <input type="date" id="attendanceDateInput" onkeydown="return false;" readonly />
@@ -110,7 +105,6 @@
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
 
-    const todayDisplay = document.getElementById("todayDisplay");
     const attendanceDateInput = document.getElementById("attendanceDateInput");
     const loadBtn = document.getElementById("loadBtn");
     const saveBtn = document.getElementById("saveBtn");
@@ -130,7 +124,6 @@
     function syncTodayUI() {
       const today = getManualToday();
       if (!today) {
-        todayDisplay.textContent = "(not set)";
         attendanceDateInput.value = "";
         todayWarning.style.display = "block";
         loadBtn.disabled = true;
@@ -139,7 +132,6 @@
         setStatus("Set Today at the top to work with attendance.", true);
         return false;
       } else {
-        todayDisplay.textContent = today;
         attendanceDateInput.value = today;
         todayWarning.style.display = "none";
         loadBtn.disabled = false;
@@ -220,6 +212,7 @@
         setStatus(`Loaded attendance for ${data.length} active employee(s).`);
       } catch (e) {
         console.error(e);
+        // Network / CORS / unreachable → e.message is usually "Failed to fetch"
         setStatus(e.message, true);
       }
     }
@@ -261,7 +254,6 @@
         }
         const result = await res.json();
         setStatus(`Saved ${result.updated} attendance row(s).`);
-        // We do NOT clear the table – user keeps seeing current values
       } catch (e) {
         console.error(e);
         setStatus(e.message, true);
