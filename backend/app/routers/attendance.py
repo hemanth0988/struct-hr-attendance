@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal
+from ..database import get_db
 from ..models.employee import Employee
 from ..models.attendance import Attendance
 from ..schemas.attendance import (
@@ -16,42 +16,27 @@ from ..utils.status_refresh import refresh_employee_statuses
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
+# GET /attendance?attendance_date=YYYY-MM-DD&today=YYYY-MM-DD
+# Returns one row per Active employee with their attendance status for that date
 @router.get("/", response_model=List[AttendanceEmployeeRow])
-def get_attendance(
-    today: date,
+def get_attendance_rows(
     attendance_date: date,
+    today: date,
     db: Session = Depends(get_db),
 ):
-    # Business rule: attendance_date must equal today
-    if attendance_date != today:
-        raise HTTPException(
-            status_code=400,
-            detail="Attendance date must be equal to today.",
-        )
-
-    # 1) Refresh employee statuses for this 'today'
+    # 1) Refresh all employee statuses based on manual Today
     refresh_employee_statuses(today=today, db=db)
 
-    # 2) Get employees who are currently Active
-    #    (Inactive / Offboarded / Vacation are filtered out)
-    active_employees = (
-        db.query(Employee)
-        .filter(Employee.current_status == "Active")
-        .all()
-    )
-
+    # 2) Get all employees, but we will only send Active ones
+    employees = db.query(Employee).order_by(Employee.id.asc()).all()
     rows: List[AttendanceEmployeeRow] = []
 
-    for emp in active_employees:
-        # Check existing attendance for this employee + date
+    for emp in employees:
+        # Only Active employees get attendance rows
+        if emp.current_status != "Active":
+            continue
+
+        # Check if there is already an attendance record for that date
         att = (
             db.query(Attendance)
             .filter(
@@ -62,7 +47,7 @@ def get_attendance(
         )
 
         if att:
-            status = att.status
+            status = att.status  # Present / PaidLeave / UnpaidLeave
         else:
             # Default = Present
             status = "Present"
@@ -80,13 +65,25 @@ def get_attendance(
     return rows
 
 
+# POST /attendance
+# Saves attendance for the given items (employee_id + date + status)
 @router.post("/")
-def save_attendance(
+def update_attendance(
     payload: AttendanceUpdateRequest,
     db: Session = Depends(get_db),
 ):
-    # Upsert attendance rows
+    if not payload.items:
+        return {"updated": 0}
+
     for item in payload.items:
+        # Optional: sanity check, status must be one of the three allowed values
+        if item.status not in {"Present", "PaidLeave", "UnpaidLeave"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status '{item.status}' for employee_id={item.employee_id}",
+            )
+
+        # Try to find an existing attendance for that employee + date
         att = (
             db.query(Attendance)
             .filter(
