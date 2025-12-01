@@ -131,8 +131,14 @@
         return;
       }
 
-      // Block going backwards
-      if (oldVal && newVal < oldVal) {
+      // If user is still typing (incomplete date), don't validate yet
+      if (newVal.length < 10) {
+        // Let the browser finish the date; we only enforce once it's a full YYYY-MM-DD
+        return;
+      }
+
+      // Block going backwards (only once we have a full date)
+      if (oldVal && oldVal.length === 10 && newVal < oldVal) {
         globalTodayInput.value = oldVal;
         todayInfo.textContent = "(cannot go back in time; keeping previous date)";
         return;
