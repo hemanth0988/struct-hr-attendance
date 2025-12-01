@@ -174,19 +174,16 @@
     function cleanMoneyInput(input) {
       let v = input.value;
 
-      // 1) Remove everything except digits and dot
+      // keep only digits and dot
       v = v.replace(/[^\d.]/g, "");
 
-      // 2) Keep only the first dot
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
-        const before = v.slice(0, firstDot + 1); // up to and incl. dot
+        const before = v.slice(0, firstDot + 1);
         let after = v.slice(firstDot + 1);
 
-        // Remove any extra dots in the decimal part
         after = after.replace(/\./g, "");
 
-        // 3) Limit to 2 decimal digits
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
@@ -217,12 +214,11 @@
     ];
 
     moneyInputs.forEach(inp => {
-      inp.value = ""; // ensure empty by default
+      inp.value = "";
 
       inp.addEventListener("input", () => {
         const oldCursor = inp.selectionStart;
         cleanMoneyInput(inp);
-        // Best effort to keep cursor near where user was typing
         const newLen = inp.value.length;
         inp.selectionStart = inp.selectionEnd = Math.min(oldCursor, newLen);
 
@@ -330,7 +326,6 @@
       try {
         setStatus("Saving...");
 
-        // Send manual Today so backend can decide Active/Inactive using it
         let url = `${API_BASE}/employees/`;
         if (manualToday) {
           url += `?today=${encodeURIComponent(manualToday)}`;
@@ -349,7 +344,6 @@
 
         setStatus(`Employee ${emp.emp_code} created successfully.`);
 
-        // Clear form
         nameInput.value = "";
         joiningDateInput.value = "";
         basicMonthlyInput.value = "";
@@ -389,7 +383,6 @@
         setStatus(data.message || "Database reset successfully.");
         employeesTableBody.innerHTML = "";
 
-        // Clear manual Today and force full app refresh
         localStorage.removeItem(TODAY_KEY);
         window.top.location.reload();
       } catch (e) {
@@ -399,10 +392,15 @@
     });
 
     // -------- List Employees (bottom table) --------
-
     async function loadEmployees() {
       try {
-        const res = await fetch(`${API_BASE}/employees/`);
+        const manualToday = localStorage.getItem(TODAY_KEY) || "";
+        let url = `${API_BASE}/employees/`;
+        if (manualToday) {
+          url += `?today=${encodeURIComponent(manualToday)}`;
+        }
+
+        const res = await fetch(url);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || "Failed to fetch employees");
@@ -434,7 +432,6 @@
 
     refreshBtn.addEventListener("click", loadEmployees);
 
-    // Initial load
     loadEmployees();
   </script>
 </body>
