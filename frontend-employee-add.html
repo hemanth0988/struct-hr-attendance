@@ -51,6 +51,8 @@
       font-size: 13px;
       padding: 3px 4px;
     }
+
+    /* Overlays */
     .overlay {
       position: fixed;
       inset: 0;
@@ -409,6 +411,10 @@
         const daily = (total / 30).toFixed(2);
         paidLeaveDailyInput.value = daily;
         vacationDailyInput.value = daily;
+      } else {
+        totalMonthlyInput.value = "";
+        paidLeaveDailyInput.value = "";
+        vacationDailyInput.value = "";
       }
     }
 
@@ -541,7 +547,6 @@
         inp.readOnly = isReadOnly;
         inp.style.background = isReadOnly ? "#f7f7f7" : "#ffffff";
       });
-      // total is always readonly
       salaryTotalMonthlyInput.readOnly = true;
       salaryTotalMonthlyInput.style.background = "#f7f7f7";
 
@@ -555,7 +560,7 @@
       salaryStatus.textContent = "";
       salaryStatus.style.color = "black";
 
-      // Fill values (if backend doesn't send them, they will just be blank)
+      // Pre-fill from API (if present)
       salaryBasicMonthlyInput.value =
         emp.basic_pay_monthly != null ? Number(emp.basic_pay_monthly).toFixed(2) : "";
       salaryTransportMonthlyInput.value =
@@ -618,17 +623,23 @@
       });
     });
 
+    // UPDATED: auto-calc total + daily values
     function recalcSalaryTotals() {
       const bm = parseFloat(salaryBasicMonthlyInput.value) || 0;
       const tm = parseFloat(salaryTransportMonthlyInput.value) || 0;
       const am = parseFloat(salaryAccommodationMonthlyInput.value) || 0;
       const om = parseFloat(salaryOtherMonthlyInput.value) || 0;
       const total = bm + tm + am + om;
+
       if (total > 0) {
         salaryTotalMonthlyInput.value = total.toFixed(2);
-        // Keep daily fields if user wants to align them manually; we don't auto-overwrite here.
+        const daily = (total / 30).toFixed(2);
+        salaryPaidLeaveDailyInput.value = daily;
+        salaryVacationDailyInput.value = daily;
       } else {
         salaryTotalMonthlyInput.value = "";
+        salaryPaidLeaveDailyInput.value = "";
+        salaryVacationDailyInput.value = "";
       }
     }
 
@@ -648,7 +659,6 @@
           vacation_pay_daily: parseFloat(salaryVacationDailyInput.value) || 0
         };
 
-        // This assumes you have a PATCH /employees/{emp_code} endpoint
         const res = await fetch(
           `${API_BASE}/employees/${encodeURIComponent(currentSalaryEmpCode)}`,
           {
