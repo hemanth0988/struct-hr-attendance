@@ -293,6 +293,102 @@
     window.addEventListener("storage", () => {
       syncTodayUI();
     });
+    // ----- Month Overview (new UI) -----
+(function () {
+  function getManualToday() {
+    // Read the same Today we use everywhere else
+    return localStorage.getItem("struct_hr_manual_today_global") || "";
+  }
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : "" + n;
+  }
+
+  function buildMonthOverview() {
+    const todayStr = getManualToday();
+    const warningEl = document.getElementById("monthTodayWarning");
+    const tbody = document.querySelector("#monthTable tbody");
+
+    if (!tbody) {
+      return; // in case HTML not present
+    }
+
+    if (!todayStr) {
+      // No Today set → show warning and clear table
+      if (warningEl) warningEl.style.display = "block";
+      tbody.innerHTML = "";
+      return;
+    }
+
+    if (warningEl) warningEl.style.display = "none";
+
+    const parts = todayStr.split("-");
+    if (parts.length !== 3) {
+      tbody.innerHTML = "";
+      return;
+    }
+
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10); // 1-12
+    const todayDay = parseInt(parts[2], 10);
+
+    if (isNaN(year) || isNaN(month) || isNaN(todayDay)) {
+      tbody.innerHTML = "";
+      return;
+    }
+
+    // Number of days in this month
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    tbody.innerHTML = "";
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const tr = document.createElement("tr");
+
+      // Show date nicely: 2025-12-01
+      const dateStr = `${year}-${pad2(month)}-${pad2(d)}`;
+
+      const tdDate = document.createElement("td");
+      tdDate.textContent = dateStr;
+
+      const tdStatus = document.createElement("td");
+      // For now, everything is Pending. Later we'll wire real Marked/Pending from backend.
+      tdStatus.textContent = "Pending";
+
+      const tdAction = document.createElement("td");
+      if (d === todayDay) {
+        const btn = document.createElement("button");
+        btn.textContent = "Mark Attendance";
+        btn.type = "button";
+        btn.dataset.attDate = dateStr;
+        // For now, just a placeholder – in Step 2 we'll open the overlay.
+        btn.addEventListener("click", () => {
+          // We'll hook this to the overlay logic later
+          console.log("Mark Attendance clicked for", dateStr);
+          alert("In next step, this will open the attendance overlay for " + dateStr);
+        });
+        tdAction.appendChild(btn);
+      } else {
+        tdAction.textContent = "-";
+      }
+
+      tr.appendChild(tdDate);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdAction);
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Build once when page loads
+  document.addEventListener("DOMContentLoaded", buildMonthOverview);
+
+  // Rebuild when Today changes in another tab/frame
+  window.addEventListener("storage", (ev) => {
+    if (ev.key === "struct_hr_manual_today_global") {
+      buildMonthOverview();
+    }
+  });
+})();
   </script>
 </body>
 </html>
