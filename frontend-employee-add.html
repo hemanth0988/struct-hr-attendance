@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Struct HR – Add Employee</title>
+  <title>Employees</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 1000px;
+      max-width: 1100px;
       margin: 20px auto;
       padding: 0 10px;
     }
@@ -18,29 +18,19 @@
       padding: 12px;
       border-radius: 6px;
       margin-bottom: 16px;
-    }
-    label {
-      display: inline-block;
-      width: 200px;
-      margin-bottom: 6px;
-    }
-    input[type="text"],
-    input[type="date"] {
-      padding: 4px 6px;
-      width: 200px;
-    }
-    input[readonly] {
-      background: #f7f7f7;
+      background: #fafafa;
     }
     button {
       padding: 6px 12px;
-      margin-top: 10px;
       cursor: pointer;
+      margin-right: 8px;
+      margin-top: 4px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
+      font-size: 14px;
     }
     th, td {
       border: 1px solid #ddd;
@@ -50,89 +40,96 @@
     th {
       background: #f3f3f3;
     }
-    #status {
-      margin-left: 10px;
+    #statusMsg {
       font-size: 0.9rem;
+      margin-left: 8px;
     }
-    .inline-controls {
-      margin-top: 8px;
+    #todayWarning {
+      color: red;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    select, input[type="date"] {
+      font-size: 13px;
+      padding: 3px 4px;
+    }
+
+    /* Modal overlay for Add Employee */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: none; /* shown via JS */
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .overlay.visible {
+      display: flex;
+    }
+    .overlay-content {
+      background: #fff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      width: 550px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+    .overlay-content h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+    .overlay-content label {
+      display: inline-block;
+      width: 200px;
       margin-bottom: 6px;
     }
-    .inline-controls > * {
-      margin-right: 8px;
+    .overlay-content input[type="text"],
+    .overlay-content input[type="date"] {
+      padding: 4px 6px;
+      width: 200px;
+    }
+    .overlay-content input[readonly] {
+      background: #f7f7f7;
+    }
+    .overlay-actions {
+      margin-top: 10px;
+    }
+    #addStatus {
+      margin-left: 8px;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
-  <h1>Struct HR – Add Employee</h1>
+  <h1>Employees</h1>
 
-  <div class="panel">
-    <h3>Step 1 – New Employee Details</h3>
-
-    <div>
-      <label for="nameInput">Name *</label>
-      <input type="text" id="nameInput" />
-    </div>
-
-    <div>
-      <label for="joiningDateInput">Joining date *</label>
-      <input type="date" id="joiningDateInput" />
-    </div>
-
-    <h4>Monthly salary components *</h4>
-
-    <div>
-      <label for="basicMonthlyInput">Basic pay (monthly)</label>
-      <input type="text" id="basicMonthlyInput" />
-    </div>
-    <div>
-      <label for="transportMonthlyInput">Transport (monthly)</label>
-      <input type="text" id="transportMonthlyInput" />
-    </div>
-    <div>
-      <label for="accommodationMonthlyInput">Accommodation (monthly)</label>
-      <input type="text" id="accommodationMonthlyInput" />
-    </div>
-    <div>
-      <label for="otherMonthlyInput">Other (monthly)</label>
-      <input type="text" id="otherMonthlyInput" />
-    </div>
-
-    <div>
-      <label for="totalMonthlyInput">Total salary (monthly)</label>
-      <input type="text" id="totalMonthlyInput" readonly />
-    </div>
-
-    <h4>Leave-related daily amounts *</h4>
-
-    <div>
-      <label for="paidLeaveDailyInput">Paid leave (daily)</label>
-      <input type="text" id="paidLeaveDailyInput" />
-    </div>
-    <div>
-      <label for="vacationDailyInput">Vacation pay (daily)</label>
-      <input type="text" id="vacationDailyInput" />
-    </div>
-
-    <button id="addBtn">Add Employee</button>
-    <span id="status"></span>
+  <div id="todayWarning">
+    Please set <strong>Today</strong> at the top before viewing or changing employees.
   </div>
 
   <div class="panel">
-    <h3>Step 2 – Current Employees (read-only)</h3>
+    <h3>Employee List & Status</h3>
 
-    <div class="inline-controls">
-      <button id="refreshBtn">Refresh List</button>
+    <div>
+      <button id="reloadBtn">Refresh list</button>
+      <button id="saveChangesBtn">Save new status changes</button>
       <button id="resetDbBtn">Reset DB</button>
+      <button id="openAddOverlayBtn">Add new employee</button>
+      <span id="statusMsg"></span>
     </div>
 
-    <table id="employeesTable">
+    <table id="statusTable">
       <thead>
         <tr>
           <th>Emp Code</th>
           <th>Name</th>
           <th>Joining Date</th>
           <th>Current Status</th>
+          <th>New Status</th>
+          <th>Effective Date</th>
         </tr>
       </thead>
       <tbody>
@@ -141,56 +138,348 @@
     </table>
   </div>
 
+  <!-- Add Employee Modal -->
+  <div id="addEmployeeOverlay" class="overlay">
+    <div class="overlay-content">
+      <h3>Add new employee</h3>
+
+      <div>
+        <label for="nameInput">Name *</label>
+        <input type="text" id="nameInput" />
+      </div>
+
+      <div>
+        <label for="joiningDateInput">Joining date *</label>
+        <input type="date" id="joiningDateInput" />
+      </div>
+
+      <h4>Monthly salary components *</h4>
+
+      <div>
+        <label for="basicMonthlyInput">Basic pay (monthly)</label>
+        <input type="text" id="basicMonthlyInput" />
+      </div>
+      <div>
+        <label for="transportMonthlyInput">Transport (monthly)</label>
+        <input type="text" id="transportMonthlyInput" />
+      </div>
+      <div>
+        <label for="accommodationMonthlyInput">Accommodation (monthly)</label>
+        <input type="text" id="accommodationMonthlyInput" />
+      </div>
+      <div>
+        <label for="otherMonthlyInput">Other (monthly)</label>
+        <input type="text" id="otherMonthlyInput" />
+      </div>
+
+      <div>
+        <label for="totalMonthlyInput">Total salary (monthly)</label>
+        <input type="text" id="totalMonthlyInput" readonly />
+      </div>
+
+      <h4>Leave-related daily amounts *</h4>
+
+      <div>
+        <label for="paidLeaveDailyInput">Paid leave (daily)</label>
+        <input type="text" id="paidLeaveDailyInput" />
+      </div>
+      <div>
+        <label for="vacationDailyInput">Vacation pay (daily)</label>
+        <input type="text" id="vacationDailyInput" />
+      </div>
+
+      <div class="overlay-actions">
+        <button id="addEmployeeBtn">Add employee</button>
+        <button id="cancelAddBtn" type="button">Cancel</button>
+        <span id="addStatus"></span>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
 
+    const reloadBtn = document.getElementById("reloadBtn");
+    const saveChangesBtn = document.getElementById("saveChangesBtn");
+    const resetDbBtn = document.getElementById("resetDbBtn");
+    const openAddOverlayBtn = document.getElementById("openAddOverlayBtn");
+
+    const statusMsg = document.getElementById("statusMsg");
+    const statusTableBody = document.querySelector("#statusTable tbody");
+    const todayWarning = document.getElementById("todayWarning");
+
+    // Modal elements
+    const overlay = document.getElementById("addEmployeeOverlay");
+    const addEmployeeBtn = document.getElementById("addEmployeeBtn");
+    const cancelAddBtn = document.getElementById("cancelAddBtn");
+    const addStatusSpan = document.getElementById("addStatus");
+
     const nameInput = document.getElementById("nameInput");
     const joiningDateInput = document.getElementById("joiningDateInput");
-
     const basicMonthlyInput = document.getElementById("basicMonthlyInput");
     const transportMonthlyInput = document.getElementById("transportMonthlyInput");
     const accommodationMonthlyInput = document.getElementById("accommodationMonthlyInput");
     const otherMonthlyInput = document.getElementById("otherMonthlyInput");
     const totalMonthlyInput = document.getElementById("totalMonthlyInput");
-
     const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
     const vacationDailyInput = document.getElementById("vacationDailyInput");
 
-    const addBtn = document.getElementById("addBtn");
-    const refreshBtn = document.getElementById("refreshBtn");
-    const resetDbBtn = document.getElementById("resetDbBtn");
-
-    const statusSpan = document.getElementById("status");
-    const employeesTableBody = document.querySelector("#employeesTable tbody");
-
-    function setStatus(msg, isError = false) {
-      statusSpan.textContent = msg || "";
-      statusSpan.style.color = isError ? "red" : "green";
+    function setMsg(msg, isError = false) {
+      statusMsg.textContent = msg || "";
+      statusMsg.style.color = isError ? "red" : "green";
     }
 
-    // -------- Decimal helpers (for text inputs) --------
+    function setAddStatus(msg, isError = false) {
+      addStatusSpan.textContent = msg || "";
+      addStatusSpan.style.color = isError ? "red" : "green";
+    }
+
+    function getManualToday() {
+      return localStorage.getItem(TODAY_KEY) || "";
+    }
+
+    function updateTodayRequirement() {
+      const today = getManualToday();
+      if (!today) {
+        todayWarning.style.display = "block";
+        reloadBtn.disabled = true;
+        saveChangesBtn.disabled = true;
+        resetDbBtn.disabled = false; // allow reset even if Today not set
+        openAddOverlayBtn.disabled = true;
+        statusTableBody.innerHTML = "";
+        setMsg("Set Today at the top to work with employees.", true);
+        return false;
+      } else {
+        todayWarning.style.display = "none";
+        reloadBtn.disabled = false;
+        saveChangesBtn.disabled = false;
+        resetDbBtn.disabled = false;
+        openAddOverlayBtn.disabled = false;
+        setMsg("");
+        return true;
+      }
+    }
+
+    // --------- STATUS TABLE (merged from Employee Status page) ---------
+
+    async function loadStatuses() {
+      setMsg("");
+
+      if (!updateTodayRequirement()) {
+        return;
+      }
+
+      const today = getManualToday();
+
+      try {
+        setMsg("Loading...");
+        const res = await fetch(
+          `${API_BASE}/employees/?today=${encodeURIComponent(today)}`
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to fetch employees");
+        }
+        const data = await res.json();
+
+        statusTableBody.innerHTML = "";
+
+        if (!Array.isArray(data) || data.length === 0) {
+          setMsg("No employees found.", true);
+          return;
+        }
+
+        data.forEach(emp => {
+          const tr = document.createElement("tr");
+          tr.dataset.empCode = emp.emp_code;
+
+          const tdCode = document.createElement("td");
+          tdCode.textContent = emp.emp_code;
+
+          const tdName = document.createElement("td");
+          tdName.textContent = emp.name;
+
+          const tdJoin = document.createElement("td");
+          tdJoin.textContent = emp.joining_date;
+
+          const tdCurrent = document.createElement("td");
+          tdCurrent.textContent = emp.current_status;
+
+          const tdNew = document.createElement("td");
+          const select = document.createElement("select");
+          const opts = ["-", "Active", "On Vacation", "Offboarded"];
+          opts.forEach(label => {
+            const opt = document.createElement("option");
+            opt.textContent = label;
+            opt.value = label === "-" ? "" : label;
+            select.appendChild(opt);
+          });
+
+          // Pre-fill upcoming status if present
+          const upcoming = emp.upcoming_status || "";
+          if (upcoming) {
+            select.value = upcoming;
+          }
+
+          tdNew.appendChild(select);
+
+          const tdDate = document.createElement("td");
+          const dateInput = document.createElement("input");
+          dateInput.type = "date";
+
+          // Pre-fill effective date if present
+          const effDate = emp.status_change_date || "";
+          if (effDate) {
+            dateInput.value = effDate; // assuming YYYY-MM-DD
+          }
+
+          tdDate.appendChild(dateInput);
+
+          tr.appendChild(tdCode);
+          tr.appendChild(tdName);
+          tr.appendChild(tdJoin);
+          tr.appendChild(tdCurrent);
+          tr.appendChild(tdNew);
+          tr.appendChild(tdDate);
+          statusTableBody.appendChild(tr);
+        });
+
+        setMsg(`Loaded ${data.length} employees for Today = ${today}.`);
+      } catch (e) {
+        console.error(e);
+        setMsg(e.message, true);
+      }
+    }
+
+    reloadBtn.addEventListener("click", loadStatuses);
+
+    saveChangesBtn.addEventListener("click", async () => {
+      setMsg("");
+
+      if (!updateTodayRequirement()) {
+        return;
+      }
+      const today = getManualToday();
+
+      const rows = Array.from(statusTableBody.querySelectorAll("tr"));
+      if (rows.length === 0) {
+        setMsg("No employees loaded. Refresh list first.", true);
+        return;
+      }
+
+      const changes = [];
+      for (const tr of rows) {
+        const empCode = tr.dataset.empCode;
+        const select = tr.querySelector("select");
+        const dateInput = tr.querySelector('input[type="date"]');
+
+        const newStatus = select.value;
+        const effectiveDate = dateInput.value;
+
+        if (!newStatus && !effectiveDate) {
+          continue;
+        }
+
+        // If one is set but not the other -> error
+        if ((newStatus && !effectiveDate) || (!newStatus && effectiveDate)) {
+          setMsg(
+            `Employee ${empCode}: both New Status and Effective Date are required if you set either.`,
+            true
+          );
+          return;
+        }
+
+        // Effective date must be >= Today
+        if (effectiveDate < today) {
+          setMsg(
+            `Employee ${empCode}: Effective Date cannot be earlier than Today (${today}).`,
+            true
+          );
+          return;
+        }
+
+        changes.push({
+          emp_code: empCode,
+          new_status: newStatus,
+          effective_date: effectiveDate
+        });
+      }
+
+      if (changes.length === 0) {
+        setMsg("No changes to save.", true);
+        return;
+      }
+
+      try {
+        setMsg("Saving changes...");
+        const res = await fetch(`${API_BASE}/employees/status-changes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ today, changes })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to save status changes");
+        }
+        const result = await res.json();
+        setMsg(`Saved ${result.updated} status change(s).`);
+        await loadStatuses();
+      } catch (e) {
+        console.error(e);
+        setMsg(e.message, true);
+      }
+    });
+
+    // Reset DB from here (also clears Today and reloads whole app)
+    resetDbBtn.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Are you sure you want to delete ALL employees and attendance? This cannot be undone."
+        )
+      ) {
+        return;
+      }
+
+      try {
+        setMsg("Resetting database...");
+        const res = await fetch(`${API_BASE}/admin/reset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Reset failed");
+        }
+        const data = await res.json();
+        setMsg(data.message || "Database reset successfully.");
+        statusTableBody.innerHTML = "";
+
+        // Clear Today and reload whole app (index + iframe)
+        localStorage.removeItem(TODAY_KEY);
+        window.top.location.reload();
+      } catch (e) {
+        console.error(e);
+        setMsg(e.message, true);
+      }
+    });
+
+    // --------- ADD EMPLOYEE MODAL (same logic as old Add page) ---------
 
     function cleanMoneyInput(input) {
       let v = input.value;
-
-      // keep only digits and dot
       v = v.replace(/[^\d.]/g, "");
-
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
         const before = v.slice(0, firstDot + 1);
         let after = v.slice(firstDot + 1);
-
         after = after.replace(/\./g, "");
-
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
-
         v = before + after;
       }
-
       input.value = v;
     }
 
@@ -215,7 +504,6 @@
 
     moneyInputs.forEach(inp => {
       inp.value = "";
-
       inp.addEventListener("input", () => {
         const oldCursor = inp.selectionStart;
         cleanMoneyInput(inp);
@@ -255,7 +543,6 @@
       const tm = valueOrZero(transportMonthlyInput);
       const am = valueOrZero(accommodationMonthlyInput);
       const om = valueOrZero(otherMonthlyInput);
-
       const total = bm + tm + am + om;
 
       if (total > 0) {
@@ -270,14 +557,39 @@
       }
     }
 
-    // -------- Add Employee (Today required) --------
+    function openOverlay() {
+      setAddStatus("");
+      nameInput.value = "";
+      joiningDateInput.value = "";
+      basicMonthlyInput.value = "";
+      transportMonthlyInput.value = "";
+      accommodationMonthlyInput.value = "";
+      otherMonthlyInput.value = "";
+      totalMonthlyInput.value = "";
+      paidLeaveDailyInput.value = "";
+      vacationDailyInput.value = "";
+      overlay.classList.add("visible");
+    }
 
-    addBtn.addEventListener("click", async () => {
-      setStatus("");
+    function closeOverlay() {
+      overlay.classList.remove("visible");
+    }
 
-      const manualToday = localStorage.getItem(TODAY_KEY) || "";
+    openAddOverlayBtn.addEventListener("click", () => {
+      if (!updateTodayRequirement()) return;
+      openOverlay();
+    });
+
+    cancelAddBtn.addEventListener("click", () => {
+      closeOverlay();
+    });
+
+    addEmployeeBtn.addEventListener("click", async () => {
+      setAddStatus("");
+
+      const manualToday = getManualToday();
       if (!manualToday) {
-        setStatus("Please set Today at the top before adding employees.", true);
+        setAddStatus("Please set Today at the top before adding employees.", true);
         return;
       }
 
@@ -285,7 +597,7 @@
       const joiningDate = joiningDateInput.value;
 
       if (!name || !joiningDate) {
-        setStatus("Name and Joining date are required.", true);
+        setAddStatus("Name and Joining date are required.", true);
         return;
       }
 
@@ -295,37 +607,31 @@
         accommodationMonthlyInput.value === "" ||
         otherMonthlyInput.value === ""
       ) {
-        setStatus("All monthly salary components are required.", true);
+        setAddStatus("All monthly salary components are required.", true);
         return;
       }
 
       if (paidLeaveDailyInput.value === "" || vacationDailyInput.value === "") {
-        setStatus("Paid leave daily and Vacation daily are required.", true);
+        setAddStatus(
+          "Paid leave daily and Vacation daily are required.",
+          true
+        );
         return;
       }
-
-      const basicMonthly = valueOrZero(basicMonthlyInput);
-      const transportMonthly = valueOrZero(transportMonthlyInput);
-      const accommodationMonthly = valueOrZero(accommodationMonthlyInput);
-      const otherMonthly = valueOrZero(otherMonthlyInput);
-
-      const paidLeaveDaily = valueOrZero(paidLeaveDailyInput);
-      const vacationDaily = valueOrZero(vacationDailyInput);
 
       const payload = {
         name: name,
         joining_date: joiningDate,
-        basic_pay_monthly: basicMonthly,
-        transport_monthly: transportMonthly,
-        accommodation_monthly: accommodationMonthly,
-        other_monthly: otherMonthly,
-        paid_leave_daily: paidLeaveDaily,
-        vacation_pay_daily: vacationDaily
+        basic_pay_monthly: valueOrZero(basicMonthlyInput),
+        transport_monthly: valueOrZero(transportMonthlyInput),
+        accommodation_monthly: valueOrZero(accommodationMonthlyInput),
+        other_monthly: valueOrZero(otherMonthlyInput),
+        paid_leave_daily: valueOrZero(paidLeaveDailyInput),
+        vacation_pay_daily: valueOrZero(vacationDailyInput)
       };
 
       try {
-        setStatus("Saving...");
-
+        setAddStatus("Saving...");
         let url = `${API_BASE}/employees/`;
         if (manualToday) {
           url += `?today=${encodeURIComponent(manualToday)}`;
@@ -342,97 +648,30 @@
         }
         const emp = await res.json();
 
-        setStatus(`Employee ${emp.emp_code} created successfully.`);
-
-        nameInput.value = "";
-        joiningDateInput.value = "";
-        basicMonthlyInput.value = "";
-        transportMonthlyInput.value = "";
-        accommodationMonthlyInput.value = "";
-        otherMonthlyInput.value = "";
-        totalMonthlyInput.value = "";
-        paidLeaveDailyInput.value = "";
-        vacationDailyInput.value = "";
-
-        await loadEmployees();
+        setAddStatus(`Employee ${emp.emp_code} created successfully.`);
+        // Refresh main table
+        await loadStatuses();
+        // Close after small delay so message is visible briefly
+        setTimeout(() => {
+          closeOverlay();
+        }, 400);
       } catch (e) {
         console.error(e);
-        setStatus(e.message, true);
+        setAddStatus(e.message, true);
       }
     });
 
-    // -------- Reset DB (also clear Today + reload app) --------
+    // --------- INIT ---------
 
-    resetDbBtn.addEventListener("click", async () => {
-      if (!confirm("Are you sure you want to delete ALL employees and attendance? This cannot be undone.")) {
-        return;
-      }
-
-      try {
-        setStatus("Resetting database...");
-        const res = await fetch(`${API_BASE}/admin/reset`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}"
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "Reset failed");
-        }
-        const data = await res.json();
-        setStatus(data.message || "Database reset successfully.");
-        employeesTableBody.innerHTML = "";
-
-        localStorage.removeItem(TODAY_KEY);
-        window.top.location.reload();
-      } catch (e) {
-        console.error(e);
-        setStatus(e.message, true);
+    document.addEventListener("DOMContentLoaded", () => {
+      if (updateTodayRequirement()) {
+        loadStatuses();
       }
     });
 
-    // -------- List Employees (bottom table) --------
-    async function loadEmployees() {
-      try {
-        const manualToday = localStorage.getItem(TODAY_KEY) || "";
-        let url = `${API_BASE}/employees/`;
-        if (manualToday) {
-          url += `?today=${encodeURIComponent(manualToday)}`;
-        }
-
-        const res = await fetch(url);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "Failed to fetch employees");
-        }
-        const data = await res.json();
-
-        employeesTableBody.innerHTML = "";
-        data.forEach(emp => {
-          const tr = document.createElement("tr");
-          const tdCode = document.createElement("td");
-          tdCode.textContent = emp.emp_code;
-          const tdName = document.createElement("td");
-          tdName.textContent = emp.name;
-          const tdJoin = document.createElement("td");
-          tdJoin.textContent = emp.joining_date;
-          const tdStatus = document.createElement("td");
-          tdStatus.textContent = emp.current_status;
-          tr.appendChild(tdCode);
-          tr.appendChild(tdName);
-          tr.appendChild(tdJoin);
-          tr.appendChild(tdStatus);
-          employeesTableBody.appendChild(tr);
-        });
-      } catch (e) {
-        console.error(e);
-        setStatus(e.message, true);
-      }
-    }
-
-    refreshBtn.addEventListener("click", loadEmployees);
-
-    loadEmployees();
+    window.addEventListener("storage", () => {
+      updateTodayRequirement();
+    });
   </script>
 </body>
 </html>
