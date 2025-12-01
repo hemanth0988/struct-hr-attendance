@@ -169,19 +169,31 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
+    // -------- Decimal helpers (for text inputs) --------
+
     function cleanMoneyInput(input) {
       let v = input.value;
-      v = v.replace(/[^\\d.]/g, "");
+
+      // 1) Remove everything except digits and dot
+      v = v.replace(/[^\d.]/g, "");
+
+      // 2) Keep only the first dot
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
-        const before = v.slice(0, firstDot + 1);
+        const before = v.slice(0, firstDot + 1); // up to and incl. dot
         let after = v.slice(firstDot + 1);
-        after = after.replace(/\\./g, "");
+
+        // Remove any extra dots in the decimal part
+        after = after.replace(/\./g, "");
+
+        // 3) Limit to 2 decimal digits
         if (after.length > 2) {
           after = after.slice(0, 2);
         }
+
         v = before + after;
       }
+
       input.value = v;
     }
 
@@ -205,11 +217,15 @@
     ];
 
     moneyInputs.forEach(inp => {
-      inp.value = "";
+      inp.value = ""; // ensure empty by default
+
       inp.addEventListener("input", () => {
         const oldCursor = inp.selectionStart;
         cleanMoneyInput(inp);
-        inp.selectionStart = inp.selectionEnd = oldCursor;
+        // Best effort to keep cursor near where user was typing
+        const newLen = inp.value.length;
+        inp.selectionStart = inp.selectionEnd = Math.min(oldCursor, newLen);
+
         if (
           inp === basicMonthlyInput ||
           inp === transportMonthlyInput ||
@@ -219,6 +235,7 @@
           recalcTotals();
         }
       });
+
       inp.addEventListener("blur", () => {
         normaliseTwoDecimals(inp);
         if (
@@ -242,7 +259,9 @@
       const tm = valueOrZero(transportMonthlyInput);
       const am = valueOrZero(accommodationMonthlyInput);
       const om = valueOrZero(otherMonthlyInput);
+
       const total = bm + tm + am + om;
+
       if (total > 0) {
         totalMonthlyInput.value = total.toFixed(2);
         const daily = (total / 30).toFixed(2);
@@ -256,6 +275,7 @@
     }
 
     // -------- Add Employee (Today required) --------
+
     addBtn.addEventListener("click", async () => {
       setStatus("");
 
@@ -292,6 +312,7 @@
       const transportMonthly = valueOrZero(transportMonthlyInput);
       const accommodationMonthly = valueOrZero(accommodationMonthlyInput);
       const otherMonthly = valueOrZero(otherMonthlyInput);
+
       const paidLeaveDaily = valueOrZero(paidLeaveDailyInput);
       const vacationDaily = valueOrZero(vacationDailyInput);
 
@@ -309,7 +330,7 @@
       try {
         setStatus("Saving...");
 
-        // Send manual Today to backend so it can decide Active/Inactive correctly
+        // Send manual Today so backend can decide Active/Inactive using it
         let url = `${API_BASE}/employees/`;
         if (manualToday) {
           url += `?today=${encodeURIComponent(manualToday)}`;
@@ -328,6 +349,7 @@
 
         setStatus(`Employee ${emp.emp_code} created successfully.`);
 
+        // Clear form
         nameInput.value = "";
         joiningDateInput.value = "";
         basicMonthlyInput.value = "";
@@ -346,10 +368,12 @@
     });
 
     // -------- Reset DB (also clear Today + reload app) --------
+
     resetDbBtn.addEventListener("click", async () => {
       if (!confirm("Are you sure you want to delete ALL employees and attendance? This cannot be undone.")) {
         return;
       }
+
       try {
         setStatus("Resetting database...");
         const res = await fetch(`${API_BASE}/admin/reset`, {
@@ -364,6 +388,8 @@
         const data = await res.json();
         setStatus(data.message || "Database reset successfully.");
         employeesTableBody.innerHTML = "";
+
+        // Clear manual Today and force full app refresh
         localStorage.removeItem(TODAY_KEY);
         window.top.location.reload();
       } catch (e) {
@@ -373,6 +399,7 @@
     });
 
     // -------- List Employees (bottom table) --------
+
     async function loadEmployees() {
       try {
         const res = await fetch(`${API_BASE}/employees/`);
@@ -381,6 +408,7 @@
           throw new Error(err.detail || "Failed to fetch employees");
         }
         const data = await res.json();
+
         employeesTableBody.innerHTML = "";
         data.forEach(emp => {
           const tr = document.createElement("tr");
@@ -405,6 +433,8 @@
     }
 
     refreshBtn.addEventListener("click", loadEmployees);
+
+    // Initial load
     loadEmployees();
   </script>
 </body>
