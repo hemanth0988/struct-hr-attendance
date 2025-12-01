@@ -6,26 +6,31 @@ from ..models.employee import Employee
 
 def refresh_employee_statuses(today: date, db: Session) -> None:
     """
+    Called whenever we need to recalculate status based on a manual 'today'.
+
     1) Apply any scheduled status changes:
-       - if status_change_date == today and upcoming_status is set:
+       - if status_change_date <= today and upcoming_status is set:
          move upcoming_status into current_status and clear the future fields.
+       - This "<=" handles the case where you skip some days.
 
     2) Auto-activate future joinees:
        - if current_status == 'Inactive' and joining_date <= today:
          set current_status = 'Active'.
     """
 
-    # 1) Scheduled status changes (Offboarded / Vacation / Active, etc.)
-    employees_to_update = (
+    # 1) Apply scheduled changes whose effective date has arrived
+    scheduled = (
         db.query(Employee)
         .filter(
-            Employee.status_change_date <= today,
+            Employee.status_change_date.isnot(None),
             Employee.upcoming_status.isnot(None),
+            Employee.status_change_date <= today,
         )
         .all()
     )
 
-    for emp in employees_to_update:
+    for emp in scheduled:
+        # Upcoming becomes current; clear the future fields
         emp.current_status = emp.upcoming_status
         emp.upcoming_status = None
         emp.status_change_date = None
