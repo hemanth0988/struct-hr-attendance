@@ -10,9 +10,6 @@
       margin: 20px auto;
       padding: 0 10px;
     }
-    h1 {
-      margin-bottom: 10px;
-    }
     .panel {
       border: 1px solid #ddd;
       padding: 12px;
@@ -55,12 +52,12 @@
       padding: 3px 4px;
     }
 
-    /* Modal overlay for Add Employee */
+    /* Modal overlays (used by both Add Employee and Update Status) */
     .overlay {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.4);
-      display: none; /* shown via JS */
+      display: none;
       align-items: center;
       justify-content: center;
       z-index: 9999;
@@ -97,14 +94,15 @@
     .overlay-actions {
       margin-top: 10px;
     }
-    #addStatus {
+    #addStatus,
+    #updateStatusMsg {
       margin-left: 8px;
       font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
-  <h1>Employees</h1>
+  <!-- NOTE: h1 removed as requested -->
 
   <div id="todayWarning">
     Please set <strong>Today</strong> at the top before viewing or changing employees.
@@ -130,6 +128,7 @@
           <th>Current Status</th>
           <th>New Status</th>
           <th>Effective Date</th>
+          <th>Update Status</th>
         </tr>
       </thead>
       <tbody>
@@ -196,6 +195,34 @@
     </div>
   </div>
 
+  <!-- Update Status Modal -->
+  <div id="updateStatusOverlay" class="overlay">
+    <div class="overlay-content">
+      <h3>Update status – <span id="updateEmpLabel"></span></h3>
+
+      <div>
+        <label for="updateStatusSelect">New Status *</label>
+        <select id="updateStatusSelect">
+          <option value="">-</option>
+          <option value="Active">Active</option>
+          <option value="On Vacation">On Vacation</option>
+          <option value="Offboarded">Offboarded</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="updateEffectiveDateInput">Effective Date *</label>
+        <input type="date" id="updateEffectiveDateInput" />
+      </div>
+
+      <div class="overlay-actions">
+        <button id="saveStatusBtn">Submit</button>
+        <button id="cancelStatusBtn" type="button">Cancel</button>
+        <span id="updateStatusMsg"></span>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = "https://struct-hr-attendance-production.up.railway.app";
     const TODAY_KEY = "struct_hr_manual_today_global";
@@ -209,8 +236,8 @@
     const statusTableBody = document.querySelector("#statusTable tbody");
     const todayWarning = document.getElementById("todayWarning");
 
-    // Modal elements
-    const overlay = document.getElementById("addEmployeeOverlay");
+    // Add employee modal elements
+    const addOverlay = document.getElementById("addEmployeeOverlay");
     const addEmployeeBtn = document.getElementById("addEmployeeBtn");
     const cancelAddBtn = document.getElementById("cancelAddBtn");
     const addStatusSpan = document.getElementById("addStatus");
@@ -225,6 +252,16 @@
     const paidLeaveDailyInput = document.getElementById("paidLeaveDailyInput");
     const vacationDailyInput = document.getElementById("vacationDailyInput");
 
+    // Update status modal elements
+    const updateOverlay = document.getElementById("updateStatusOverlay");
+    const updateEmpLabel = document.getElementById("updateEmpLabel");
+    const updateStatusSelect = document.getElementById("updateStatusSelect");
+    const updateEffectiveDateInput = document.getElementById("updateEffectiveDateInput");
+    const updateStatusMsg = document.getElementById("updateStatusMsg");
+    const saveStatusBtn = document.getElementById("saveStatusBtn");
+    const cancelStatusBtn = document.getElementById("cancelStatusBtn");
+    let currentUpdateEmpCode = null;
+
     function setMsg(msg, isError = false) {
       statusMsg.textContent = msg || "";
       statusMsg.style.color = isError ? "red" : "green";
@@ -233,6 +270,11 @@
     function setAddStatus(msg, isError = false) {
       addStatusSpan.textContent = msg || "";
       addStatusSpan.style.color = isError ? "red" : "green";
+    }
+
+    function setUpdateMsg(msg, isError = false) {
+      updateStatusMsg.textContent = msg || "";
+      updateStatusMsg.style.color = isError ? "red" : "green";
     }
 
     function getManualToday() {
@@ -244,8 +286,8 @@
       if (!today) {
         todayWarning.style.display = "block";
         reloadBtn.disabled = true;
-        saveChangesBtn.disabled = true;
-        resetDbBtn.disabled = false; // allow reset even if Today not set
+        saveChangesBtn.disabled = false; // still clickable but will just show info
+        resetDbBtn.disabled = false;
         openAddOverlayBtn.disabled = true;
         statusTableBody.innerHTML = "";
         setMsg("Set Today at the top to work with employees.", true);
@@ -261,7 +303,7 @@
       }
     }
 
-    // --------- STATUS TABLE (merged from Employee Status page) ---------
+    // --------- STATUS TABLE (data-only columns) ---------
 
     async function loadStatuses() {
       setMsg("");
@@ -306,42 +348,27 @@
           const tdCurrent = document.createElement("td");
           tdCurrent.textContent = emp.current_status;
 
-          const tdNew = document.createElement("td");
-          const select = document.createElement("select");
-          const opts = ["-", "Active", "On Vacation", "Offboarded"];
-          opts.forEach(label => {
-            const opt = document.createElement("option");
-            opt.textContent = label;
-            opt.value = label === "-" ? "" : label;
-            select.appendChild(opt);
+          const tdNewText = document.createElement("td");
+          tdNewText.textContent = emp.upcoming_status || "-";
+
+          const tdDateText = document.createElement("td");
+          tdDateText.textContent = emp.status_change_date || "-";
+
+          const tdAction = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.textContent = "Update Status";
+          btn.addEventListener("click", () => {
+            openUpdateOverlay(emp);
           });
-
-          // Pre-fill upcoming status if present
-          const upcoming = emp.upcoming_status || "";
-          if (upcoming) {
-            select.value = upcoming;
-          }
-
-          tdNew.appendChild(select);
-
-          const tdDate = document.createElement("td");
-          const dateInput = document.createElement("input");
-          dateInput.type = "date";
-
-          // Pre-fill effective date if present
-          const effDate = emp.status_change_date || "";
-          if (effDate) {
-            dateInput.value = effDate; // assuming YYYY-MM-DD
-          }
-
-          tdDate.appendChild(dateInput);
+          tdAction.appendChild(btn);
 
           tr.appendChild(tdCode);
           tr.appendChild(tdName);
           tr.appendChild(tdJoin);
           tr.appendChild(tdCurrent);
-          tr.appendChild(tdNew);
-          tr.appendChild(tdDate);
+          tr.appendChild(tdNewText);
+          tr.appendChild(tdDateText);
+          tr.appendChild(tdAction);
           statusTableBody.appendChild(tr);
         });
 
@@ -354,84 +381,13 @@
 
     reloadBtn.addEventListener("click", loadStatuses);
 
-    saveChangesBtn.addEventListener("click", async () => {
-      setMsg("");
-
-      if (!updateTodayRequirement()) {
-        return;
-      }
-      const today = getManualToday();
-
-      const rows = Array.from(statusTableBody.querySelectorAll("tr"));
-      if (rows.length === 0) {
-        setMsg("No employees loaded. Refresh list first.", true);
-        return;
-      }
-
-      const changes = [];
-      for (const tr of rows) {
-        const empCode = tr.dataset.empCode;
-        const select = tr.querySelector("select");
-        const dateInput = tr.querySelector('input[type="date"]');
-
-        const newStatus = select.value;
-        const effectiveDate = dateInput.value;
-
-        if (!newStatus && !effectiveDate) {
-          continue;
-        }
-
-        // If one is set but not the other -> error
-        if ((newStatus && !effectiveDate) || (!newStatus && effectiveDate)) {
-          setMsg(
-            `Employee ${empCode}: both New Status and Effective Date are required if you set either.`,
-            true
-          );
-          return;
-        }
-
-        // Effective date must be >= Today
-        if (effectiveDate < today) {
-          setMsg(
-            `Employee ${empCode}: Effective Date cannot be earlier than Today (${today}).`,
-            true
-          );
-          return;
-        }
-
-        changes.push({
-          emp_code: empCode,
-          new_status: newStatus,
-          effective_date: effectiveDate
-        });
-      }
-
-      if (changes.length === 0) {
-        setMsg("No changes to save.", true);
-        return;
-      }
-
-      try {
-        setMsg("Saving changes...");
-        const res = await fetch(`${API_BASE}/employees/status-changes`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ today, changes })
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "Failed to save status changes");
-        }
-        const result = await res.json();
-        setMsg(`Saved ${result.updated} status change(s).`);
-        await loadStatuses();
-      } catch (e) {
-        console.error(e);
-        setMsg(e.message, true);
-      }
+    // Top "Save new status changes" now just informs user to use per-row button
+    saveChangesBtn.addEventListener("click", () => {
+      setMsg("Use the 'Update Status' button on each row to change status.", true);
     });
 
-    // Reset DB from here (also clears Today and reloads whole app)
+    // --------- RESET DB ---------
+
     resetDbBtn.addEventListener("click", async () => {
       if (
         !confirm(
@@ -456,7 +412,6 @@
         setMsg(data.message || "Database reset successfully.");
         statusTableBody.innerHTML = "";
 
-        // Clear Today and reload whole app (index + iframe)
         localStorage.removeItem(TODAY_KEY);
         window.top.location.reload();
       } catch (e) {
@@ -465,7 +420,7 @@
       }
     });
 
-    // --------- ADD EMPLOYEE MODAL (same logic as old Add page) ---------
+    // --------- ADD EMPLOYEE MODAL ---------
 
     function cleanMoneyInput(input) {
       let v = input.value;
@@ -557,7 +512,7 @@
       }
     }
 
-    function openOverlay() {
+    function openAddOverlay() {
       setAddStatus("");
       nameInput.value = "";
       joiningDateInput.value = "";
@@ -568,20 +523,20 @@
       totalMonthlyInput.value = "";
       paidLeaveDailyInput.value = "";
       vacationDailyInput.value = "";
-      overlay.classList.add("visible");
+      addOverlay.classList.add("visible");
     }
 
-    function closeOverlay() {
-      overlay.classList.remove("visible");
+    function closeAddOverlay() {
+      addOverlay.classList.remove("visible");
     }
 
     openAddOverlayBtn.addEventListener("click", () => {
       if (!updateTodayRequirement()) return;
-      openOverlay();
+      openAddOverlay();
     });
 
     cancelAddBtn.addEventListener("click", () => {
-      closeOverlay();
+      closeAddOverlay();
     });
 
     addEmployeeBtn.addEventListener("click", async () => {
@@ -612,10 +567,7 @@
       }
 
       if (paidLeaveDailyInput.value === "" || vacationDailyInput.value === "") {
-        setAddStatus(
-          "Paid leave daily and Vacation daily are required.",
-          true
-        );
+        setAddStatus("Paid leave daily and Vacation daily are required.", true);
         return;
       }
 
@@ -649,15 +601,97 @@
         const emp = await res.json();
 
         setAddStatus(`Employee ${emp.emp_code} created successfully.`);
-        // Refresh main table
         await loadStatuses();
-        // Close after small delay so message is visible briefly
         setTimeout(() => {
-          closeOverlay();
+          closeAddOverlay();
         }, 400);
       } catch (e) {
         console.error(e);
         setAddStatus(e.message, true);
+      }
+    });
+
+    // --------- UPDATE STATUS MODAL (per employee) ---------
+
+    function openUpdateOverlay(emp) {
+      setUpdateMsg("");
+      currentUpdateEmpCode = emp.emp_code;
+      updateEmpLabel.textContent = `${emp.emp_code} – ${emp.name}`;
+      updateStatusSelect.value = emp.upcoming_status || "";
+      updateEffectiveDateInput.value = emp.status_change_date || "";
+      updateOverlay.classList.add("visible");
+    }
+
+    function closeUpdateOverlay() {
+      updateOverlay.classList.remove("visible");
+      currentUpdateEmpCode = null;
+    }
+
+    cancelStatusBtn.addEventListener("click", () => {
+      closeUpdateOverlay();
+    });
+
+    saveStatusBtn.addEventListener("click", async () => {
+      setUpdateMsg("");
+
+      if (!updateTodayRequirement()) {
+        setUpdateMsg("Please set Today first.", true);
+        return;
+      }
+      const today = getManualToday();
+
+      if (!currentUpdateEmpCode) {
+        setUpdateMsg("No employee selected.", true);
+        return;
+      }
+
+      const newStatus = updateStatusSelect.value;
+      const effectiveDate = updateEffectiveDateInput.value;
+
+      if (!newStatus || !effectiveDate) {
+        setUpdateMsg(
+          "Both New Status and Effective Date are required.",
+          true
+        );
+        return;
+      }
+
+      if (effectiveDate < today) {
+        setUpdateMsg(
+          `Effective Date cannot be earlier than Today (${today}).`,
+          true
+        );
+        return;
+      }
+
+      const changes = [
+        {
+          emp_code: currentUpdateEmpCode,
+          new_status: newStatus,
+          effective_date: effectiveDate
+        }
+      ];
+
+      try {
+        setUpdateMsg("Saving...");
+        const res = await fetch(`${API_BASE}/employees/status-changes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ today, changes })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to save status change");
+        }
+        const result = await res.json();
+        setUpdateMsg(`Saved ${result.updated} status change(s).`);
+        await loadStatuses();
+        setTimeout(() => {
+          closeUpdateOverlay();
+        }, 400);
+      } catch (e) {
+        console.error(e);
+        setUpdateMsg(e.message, true);
       }
     });
 
