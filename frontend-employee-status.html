@@ -200,7 +200,7 @@
 
     reloadBtn.addEventListener("click", loadStatuses);
 
-    // Save New Status changes (front-end validation + payload preparation)
+    // Save New Status changes – uses backend /employees/status-changes
     saveChangesBtn.addEventListener("click", async () => {
       setMsg("");
 
@@ -221,15 +221,13 @@
         const select = tr.querySelector("select");
         const dateInput = tr.querySelector('input[type="date"]');
 
-        const newStatus = select.value; // "" or "Active" / "On Vacation" / "Offboarded"
-        const effectiveDate = dateInput.value; // "" or YYYY-MM-DD
+        const newStatus = select.value;
+        const effectiveDate = dateInput.value;
 
-        // If both empty -> no change for this employee
         if (!newStatus && !effectiveDate) {
           continue;
         }
 
-        // If one is set but not the other -> error
         if ((newStatus && !effectiveDate) || (!newStatus && effectiveDate)) {
           setMsg(
             `Employee ${empCode}: both New Status and Effective Date are required if you set either.`,
@@ -238,7 +236,6 @@
           return;
         }
 
-        // Effective date must be >= Today
         if (effectiveDate < today) {
           setMsg(
             `Employee ${empCode}: Effective Date cannot be earlier than Today (${today}).`,
@@ -259,16 +256,9 @@
         return;
       }
 
-      // For now, we only prepare payload and log it.
-      // Backend dev can wire this to a real endpoint later.
-      console.log("Prepared status changes:", changes);
-      setMsg(`Prepared ${changes.length} status change(s). (See console / hand over to backend dev.)`, false);
-
-      // Example of what a real call might look like (left commented for now):
-      /*
       try {
         setMsg("Saving changes...");
-        const res = await fetch(`${API_BASE}/employees/status-changes/`, {
+        const res = await fetch(`${API_BASE}/employees/status-changes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ today, changes })
@@ -278,13 +268,12 @@
           throw new Error(err.detail || "Failed to save status changes");
         }
         const result = await res.json();
-        setMsg(result.message || "Status changes saved.");
-        loadStatuses();
+        setMsg(`Saved ${result.updated} status change(s).`);
+        await loadStatuses();
       } catch (e) {
         console.error(e);
         setMsg(e.message, true);
       }
-      */
     });
 
     document.addEventListener("DOMContentLoaded", () => {
