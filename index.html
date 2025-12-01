@@ -115,30 +115,23 @@
       todayInfo.textContent = "(please set)";
     }
 
-    // Forward-only Today + auto-refresh
+    // Forward-only Today + auto-refresh, but keep behaviour simple
     globalTodayInput.addEventListener("change", () => {
       const newVal = globalTodayInput.value;
       const oldVal = localStorage.getItem(TODAY_KEY);
 
-      // Prevent clearing the field manually
+      // If user clears the date, treat as "no Today set"
       if (!newVal) {
-        if (oldVal) {
-          globalTodayInput.value = oldVal;
-          todayInfo.textContent = "(saved)";
-        } else {
-          todayInfo.textContent = "(please set)";
-        }
+        localStorage.removeItem(TODAY_KEY);
+        todayInfo.textContent = "(please set)";
+        // No need to enforce forward/backward here; it's a reset
+        window.location.reload();
         return;
       }
 
-      // If user is still typing (incomplete date), don't validate yet
-      if (newVal.length < 10) {
-        // Let the browser finish the date; we only enforce once it's a full YYYY-MM-DD
-        return;
-      }
-
-      // Block going backwards (only once we have a full date)
-      if (oldVal && oldVal.length === 10 && newVal < oldVal) {
+      // If we already had a Today stored, don't allow going backwards
+      if (oldVal && newVal < oldVal) {
+        // Revert to old value
         globalTodayInput.value = oldVal;
         todayInfo.textContent = "(cannot go back in time; keeping previous date)";
         return;
