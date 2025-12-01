@@ -175,11 +175,26 @@
             opt.value = label === "-" ? "" : label;
             select.appendChild(opt);
           });
+
+          // Pre-fill upcoming status if present
+          const upcoming = emp.upcoming_status || "";
+          if (upcoming) {
+            select.value = upcoming;
+          }
+
           tdNew.appendChild(select);
 
           const tdDate = document.createElement("td");
           const dateInput = document.createElement("input");
           dateInput.type = "date";
+
+          // Pre-fill effective date if present
+          const effDate = emp.status_change_date || "";
+          if (effDate) {
+            // Assuming backend sends YYYY-MM-DD
+            dateInput.value = effDate;
+          }
+
           tdDate.appendChild(dateInput);
 
           tr.appendChild(tdCode);
@@ -228,6 +243,7 @@
           continue;
         }
 
+        // If one is set but not the other -> error
         if ((newStatus && !effectiveDate) || (!newStatus && effectiveDate)) {
           setMsg(
             `Employee ${empCode}: both New Status and Effective Date are required if you set either.`,
@@ -236,6 +252,7 @@
           return;
         }
 
+        // Effective date must be >= Today (your 3rd requirement)
         if (effectiveDate < today) {
           setMsg(
             `Employee ${empCode}: Effective Date cannot be earlier than Today (${today}).`,
