@@ -88,7 +88,8 @@
     <main class="main">
       <div class="top-bar">
         <strong>Today:</strong>
-        <input type="date" id="globalTodayInput" />
+        <!-- Keyboard input disabled, only date picker works -->
+        <input type="date" id="globalTodayInput" onkeydown="return false;" />
         <span id="todayInfo" style="font-size:12px;color:#666;"></span>
       </div>
 
@@ -115,7 +116,7 @@
       todayInfo.textContent = "(please set)";
     }
 
-    // Forward-only Today + auto-refresh, but keep behaviour simple
+    // Forward-only Today + auto-refresh
     globalTodayInput.addEventListener("change", () => {
       const newVal = globalTodayInput.value;
       const oldVal = localStorage.getItem(TODAY_KEY);
@@ -124,7 +125,6 @@
       if (!newVal) {
         localStorage.removeItem(TODAY_KEY);
         todayInfo.textContent = "(please set)";
-        // No need to enforce forward/backward here; it's a reset
         window.location.reload();
         return;
       }
