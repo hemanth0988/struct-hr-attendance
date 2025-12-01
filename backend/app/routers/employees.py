@@ -1,11 +1,15 @@
 from datetime import date
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.employee import Employee
 from ..schemas.employee import EmployeeCreate, EmployeeStatusUpdate
+from ..utils.status_refresh import refresh_employee_statuses
+
 
 router = APIRouter(
     prefix="/employees",
@@ -24,21 +28,34 @@ def _generate_emp_code(db: Session) -> str:
 
 # ---------------------------------------
 # GET /employees/  → list all employees
+# Optional: today=YYYY-MM-DD to apply status refresh
 # ---------------------------------------
 @router.get("/")
-def list_employees(db: Session = Depends(get_db)):
-    employees = db.query(Employee).all()
+def list_employees(
+    today: date | None = None,
+    db: Session = Depends(get_db),
+):
+    # If a manual Today is supplied, refresh statuses first
+    if today is not None:
+        refresh_employee_statuses(today=today, db=db)
+
+    employees = db.query(Employee).order_by(Employee.id.asc()).all()
     return employees
 
 
 # ---------------------------------------
 # POST /employees/  → create employee
+# Optional query param: today=YYYY-MM-DD (manual Today from UI)
 # ---------------------------------------
 @router.post("/")
-def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
-    # Decide current_status from joining date
-    today = date.today()
-    if payload.joining_date > today:
+def create_employee(
+    payload: EmployeeCreate,
+    today: date | None = None,
+    db: Session = Depends(get_db),
+):
+    # Decide current_status from joining date using manual Today if given
+    today_ref = today or date.today()
+    if payload.joining_date > today_ref:
         current_status = "Inactive"
     else:
         current_status = "Active"
@@ -78,9 +95,10 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     return emp
 
 
-# -----------------------------------------------------
-# PATCH /employees/{emp_code}/status  → upcoming status
-# -----------------------------------------------------
+# ---------------------------------------
+# PATCH /employees/{emp_code}/status  → update a single employee's upcoming status
+# (still there if you ever want to use it individually)
+# ---------------------------------------
 @router.patch("/{emp_code}/status")
 def update_employee_status(
     emp_code: str,
@@ -102,3 +120,55 @@ def update_employee_status(
     db.commit()
     db.refresh(emp)
     return emp
+
+
+# ---------------------------------------
+# Bulk status changes – matches frontend "changes" payload
+# POST /employees/status-changes
+# ---------------------------------------
+class StatusChangeItem(BaseModel):
+    emp_code: str
+    new_status: str
+    effective_date: date
+
+
+class StatusChangeRequest(BaseModel):
+    today: date
+    changes: List[StatusChangeItem]
+
+
+@router.post("/status-changes")
+def apply_status_changes(
+    req: StatusChangeRequest,
+    db: Session = Depends(get_db),
+):
+    # Basic validation: effective dates should not be earlier than 'today'
+    for item in req.changes:
+        if item.effective_date < req.today:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Effective date for {item.emp_code} cannot be earlier than Today.",
+            )
+
+    updated = 0
+    for item in req.changes:
+        emp = (
+            db.query(Employee)
+            .filter(Employee.emp_code == item.emp_code)
+            .first()
+        )
+        if not emp:
+            # Skip missing employees; could also raise instead
+            continue
+
+        emp.upcoming_status = item.new_status
+        emp.status_change_date = item.effective_date
+        updated += 1
+
+    db.commit()
+
+    # After scheduling changes, we can optionally refresh immediately
+    # in case some effective_date == today
+    refresh_employee_statuses(today=req.today, db=db)
+
+    return {"updated": updated}
