@@ -150,8 +150,8 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
-    // Build month table with 1 row per day
-    function buildMonthOverview() {
+    // Build month table with 1 row per day, using backend summary for Marked/Pending
+    async function buildMonthOverview() {
       const todayStr = getToday();
       if (!monthTableBody) return;
 
@@ -176,6 +176,29 @@
       }
 
       const daysInMonth = new Date(year, month, 0).getDate();
+
+      // ----- fetch month summary from backend -----
+      const markedSet = new Set();
+      try {
+        const res = await fetch(
+          API_BASE + "/attendance/summary?today=" + encodeURIComponent(todayStr)
+        );
+        if (res.ok) {
+          const summary = await res.json();
+          if (summary && Array.isArray(summary.days)) {
+            summary.days.forEach(d => {
+              if (d.marked) {
+                // backend date comes as "YYYY-MM-DD"
+                markedSet.add(d.date);
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load month summary", e);
+        // if it fails, we'll just show Pending for all
+      }
+
       monthTableBody.innerHTML = "";
 
       for (let d = 1; d <= daysInMonth; d++) {
@@ -186,7 +209,7 @@
         tdDate.textContent = isoDate;
 
         const tdStatus = document.createElement("td");
-        tdStatus.textContent = "Pending"; // later we'll set Marked/Pending from backend
+        tdStatus.textContent = markedSet.has(isoDate) ? "Marked" : "Pending";
 
         const tdAction = document.createElement("td");
         if (d === todayDay) {
@@ -336,7 +359,9 @@
     saveBtn.addEventListener("click", saveAttendance);
     closeOverlayBtn.addEventListener("click", closeAttendanceOverlay);
 
-    document.addEventListener("DOMContentLoaded", buildMonthOverview);
+    document.addEventListener("DOMContentLoaded", () => {
+      buildMonthOverview();
+    });
 
     window.addEventListener("storage", (ev) => {
       if (ev.key === TODAY_KEY) {
