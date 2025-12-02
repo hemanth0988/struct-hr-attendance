@@ -5,6 +5,9 @@ from .database import Base, engine
 from .models import employee as employee_model  # ensure models are registered
 from .models import attendance as attendance_model
 from .routers import employees, attendance, admin_reset
+from .routers import employees, attendance, admin, system_today
+# or if using absolute import style:
+# from backend.app.routers import employees, attendance, admin, system_today
 
 # Create tables if not exist
 Base.metadata.create_all(bind=engine)
@@ -30,3 +33,5 @@ def read_root():
 app.include_router(employees.router)
 app.include_router(attendance.router)
 app.include_router(admin_reset.router)
+app.include_router(system_today.router)
+
