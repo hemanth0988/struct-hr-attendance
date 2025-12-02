@@ -150,6 +150,7 @@
       statusSpan.style.color = isError ? "red" : "green";
     }
 
+    // Build month table with 1 row per day
     function buildMonthOverview() {
       const todayStr = getToday();
       if (!monthTableBody) return;
@@ -207,6 +208,7 @@
       }
     }
 
+    // Load attendance rows for a specific date
     async function loadAttendance(dateISO) {
       const today = getToday();
       if (!today) {
@@ -265,7 +267,7 @@
         if (data.length === 0) {
           setStatus("No active employees for this date.", true);
         } else {
-          setStatus("Loaded attendance for " + data.length + " active employee(s)." );
+          setStatus("Loaded attendance for " + data.length + " active employee(s).");
         }
       } catch (e) {
         console.error(e);
@@ -273,6 +275,7 @@
       }
     }
 
+    // Save attendance rows
     async function saveAttendance() {
       const rows = Array.from(attendanceTableBody.querySelectorAll("tr"));
       if (rows.length === 0) {
